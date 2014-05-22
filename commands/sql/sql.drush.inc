@@ -133,6 +133,7 @@ function sql_drush_command() {
         'example-value' => '/path/to/file',
       ),
       'file' => 'Path to a file containing the SQL to be run.',
+      'file-delete' => 'Delete the input file after running it. Defaults to 0.',
       'extra' => array(
         'description' => 'Add custom options to the mysql command.',
         'example-value' => '--skip-column-names',
@@ -246,7 +247,7 @@ function sql_drush_help_alter(&$command) {
     if ($command['command'] == 'sql-sync') {
       unset($command['options']['source-target']['hidden'], $command['options']['target-target']['hidden']);
     }
-    else {
+    elseif ($command['commandfile'] == 'sql') {
       unset($command['options']['target']['hidden']);
     }
   }
@@ -396,6 +397,7 @@ function drush_sql_dump_execute() {
   if (!$return = drush_op_system($exec)) {
     if ($file) {
       drush_log(dt('Database dump saved to !path', array('!path' => $file)), 'success');
+      drush_backend_set_result($file);
     }
   }
   else {
@@ -772,7 +774,7 @@ function _drush_sql_get_raw_table_list($option_name) {
  */
 function _drush_sql_get_db_table_list($db_spec, $site_record = NULL) {
   $target_site = '@self';
-  if (!is_null($site_record)) {
+  if (isset($site_record)) {
     $target_site = $site_record;
   }
 
@@ -804,6 +806,7 @@ function _drush_sql_get_db_table_list($db_spec, $site_record = NULL) {
   // this is called by sql-drop. Also needed during archive-restore.
   $options = array(
     'db-spec' => $db_spec,
+    'result-file' => FALSE,
   );
   $backend_options = array(
     'integrate' => FALSE,
@@ -860,6 +863,9 @@ function drush_sql_query($query = NULL) {
   $result = _drush_sql_query($query, drush_get_option('db-spec'), $filename);
   if (!$result) {
     return drush_set_error('DRUSH_SQL_NO_QUERY', dt('Query failed.'));
+  }
+  elseif (drush_get_option('file-delete')) {
+    drush_op('drush_delete_dir', $filename);
   }
   return TRUE;
 }
@@ -989,9 +995,6 @@ function drush_sql_cli() {
  * @see hook_drush_sql_sync_sanitize() for adding custom sanitize routines.
  */
 function drush_sql_sanitize() {
-  if (!drush_confirm(dt('Do you really want to sanitize the current database?'))) {
-    return drush_user_abort();
-  }
   drush_sql_bootstrap_further();
   drush_include(DRUSH_BASE_PATH . '/commands/sql', 'sync.sql');
   drush_command_invoke_all('drush_sql_sync_sanitize', 'default');
@@ -1004,6 +1007,9 @@ function drush_sql_sanitize() {
         drush_print($messages);
       }
     }
+  }
+  if (!drush_confirm(dt('Do you really want to sanitize the current database?'))) {
+    return drush_user_abort();
   }
 
   $sanitize_query = '';
@@ -1181,7 +1187,7 @@ function drush_sql_dump_file(&$site_record) {
 }
 
 function _drush_sql_get_scheme($db_spec = NULL) {
-  if (is_null($db_spec)) {
+  if (!isset($db_spec)) {
     $db_spec = _drush_sql_get_db_spec();
   }
   return $db_spec['driver'];
@@ -1194,7 +1200,7 @@ function _drush_sql_get_scheme($db_spec = NULL) {
  * @return string
  */
 function _drush_sql_get_credentials($db_spec = NULL) {
-  if (is_null($db_spec)) {
+  if (!isset($db_spec)) {
     $db_spec = _drush_sql_get_db_spec();
   }
 
@@ -1282,7 +1288,7 @@ function _drush_sql_get_credentials($db_spec = NULL) {
 }
 
 function _drush_sql_get_invalid_url_msg($db_spec = NULL) {
-  if (is_null($db_spec)) {
+  if (!isset($db_spec)) {
     $db_spec = _drush_sql_get_db_spec();
   }
   switch (drush_drupal_major_version()) {

@@ -100,7 +100,7 @@ function _drush_environment_check_php_ini() {
     }
     else {
       foreach ($disallowed_value as $test_value) {
-        if (strstr($ini_value, $test_value) !== FALSE) {
+        if (preg_match('/(^|,)' . $test_value . '(,|$)/', $ini_value)) {
           $invalid_value = TRUE;
         }
       }
@@ -270,6 +270,28 @@ function drush_site_path($path = NULL) {
   }
 
   return $site_path;
+}
+
+/**
+ * Lookup a site's directory via the sites.php file given a hostname.
+ *
+ * @param $hostname
+ *   The hostname of a site.  May be converted from URI.
+ *
+ * @return $dir
+ *   The directory associated with that hostname or FALSE if not found.
+ */
+function drush_site_dir_lookup_from_hostname($hostname) {
+  $site_root = drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT');
+  if (file_exists($site_root . '/sites/sites.php')) {
+    $sites = array();
+    // This will overwrite $sites with the desired mappings.
+    include($site_root . '/sites/sites.php');
+    return isset($sites[$hostname]) ? $sites[$hostname] : FALSE;
+  }
+  else {
+    return FALSE;
+  }
 }
 
 /**
@@ -584,9 +606,10 @@ function drush_verify_cli() {
  * e.g. in backend_invoke.
  */
 function drush_build_drush_command($drush_path = NULL, $php = NULL, $os = NULL, $remote_command = FALSE) {
+  $environment_variables = array();
   $os = _drush_get_os($os);
   $additional_options = '';
-  if (is_null($drush_path)) {
+  if (!isset($drush_path)) {
     if (!$remote_command) {
       $drush_path = DRUSH_COMMAND;
     }
@@ -609,18 +632,27 @@ function drush_build_drush_command($drush_path = NULL, $php = NULL, $os = NULL, 
       $additional_options .= ' --php=' . drush_escapeshellarg($php, $os);
     }
     // We will also add in the php options from --php-options
-    $php = drush_escapeshellarg($php, $os) . ' ';
+    $prefix = drush_escapeshellarg($php, $os);
     $php_options = drush_get_option('php-options','');
     if (!empty($php_options)) {
-      $php .= $php_options . ' ';
+      $prefix .= ' ' . $php_options;
       $additional_options .= ' --php-options=' . drush_escapeshellarg($php_options, $os);
     }
   }
-  elseif ($php && drush_has_bash($os)) {
-    $php = 'DRUSH_PHP=' . drush_escapeshellarg($php, $os) . ' ';
+  else {
+    // Set environment variables to propogate config to redispatched calls.
+    if (drush_has_bash($os)) {
+      if ($php) {
+        $environment_variables[] = 'DRUSH_PHP=' . drush_escapeshellarg($php, $os);
+      }
+      if ($php_options_alias = drush_get_option('php-options', NULL, 'alias')) {
+        $environment_variables[] = 'PHP_OPTIONS=' . drush_escapeshellarg($php_options_alias, $os);
+      }
+      $prefix = implode(' ', $environment_variables);
+    }
   }
 
-  return $php . drush_escapeshellarg($drush_path, $os) . $additional_options;
+  return trim($prefix . ' ' . drush_escapeshellarg($drush_path, $os) . $additional_options);
 }
 
 /**

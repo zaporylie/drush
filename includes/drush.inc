@@ -603,7 +603,7 @@ function drush_choice_multiple($options, $defaults = FALSE, $prompt = 'Select so
  * @see drush_confirm()
  */
 function drush_prompt($prompt, $default = NULL, $required = TRUE, $password = FALSE) {
-  if (!is_null($default)) {
+  if (isset($default)) {
     $prompt .= " [" . $default . "]";
   }
   $prompt .= ": ";
@@ -1387,9 +1387,9 @@ function drush_do_command_redispatch($command, $args = array(), $remote_host = N
   }
 
   // Run the command in a new process.
-  drush_log(dt('Begin redispatch via invoke process'));
+  drush_log(dt('Begin redispatch via drush_invoke_process().'));
   $values = drush_invoke_process('@self', $command_name, $args, $command_options, $backend_options);
-  drush_log(dt('Invoke process is complete'));
+  drush_log(dt('End redispatch via drush_invoke_process().'));
 
   return $values;
 }
@@ -1424,8 +1424,11 @@ function drush_do_command_redispatch($command, $args = array(), $remote_host = N
  * @param type
  *   The type of message to be logged. Common types are 'warning', 'error', 'success' and 'notice'.
  *   A type of 'failed' can also be supplied to flag as an 'error'.
- *   A type of 'ok' or 'completed' can also be supplied to flag as a 'success'
- *   All other types of messages will be assumed to be notices.
+ *   A type of 'ok' or 'completed' can also be supplied to flag as a 'success'.
+ *   If you want your log messages to print to screen without the user entering
+ *   a -v or --verbose flag, use type 'ok', this prints log messages out to
+ *   STDERR, which prints to screen (unless you have redirected it). All other
+ *   types of messages will be assumed to be notices.
  */
 function drush_log($message, $type = 'notice', $error = null) {
   $log =& drush_get_context('DRUSH_LOG', array());
@@ -1846,7 +1849,7 @@ function drush_errors_off() {
  * @see drush_errors_off()
  */
 function drush_errors_on($errors = null) {
-  if (is_null($errors)) {
+  if (!isset($errors)) {
     $errors = error_reporting();
   }
   else {

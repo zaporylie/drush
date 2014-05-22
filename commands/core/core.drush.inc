@@ -290,7 +290,7 @@ function core_drush_command() {
       ),
     ),
     'examples' => array(
-      'drush site-install expert --locale=uk' => '(Re)install using the expert install profile. Set default language to Ukranian.',
+      'drush site-install expert --locale=uk' => '(Re)install using the expert install profile. Set default language to Ukrainian.',
       'drush site-install --db-url=mysql://root:pass@localhost:port/dbname' => 'Install using the specified DB params.',
       'drush site-install --db-url=sqlite://sites/example.com/files/.ht.sqlite' => 'Install using SQLite (D7+ only).',
       'drush site-install --account-name=joe --account-pass=mom' => 'Re-install with specified uid1 credentials.',
@@ -574,10 +574,10 @@ function _core_path_aliases($project = '') {
       // for a project (or a few) and add its path to the path list
       if (!empty($project)) {
         drush_include_engine('drupal', 'environment');
-        $modules = drush_get_modules();
+        $projects = array_merge(drush_get_modules(), drush_get_themes());
         foreach(explode(',', $project) as $target) {
-          if (array_key_exists($target, $modules)) {
-            $paths['%' . $target] = DRUPAL_ROOT . '/' . dirname($modules[$target]->filename);
+          if (array_key_exists($target, $projects)) {
+            $paths['%' . $target] = $drupal_root . '/' . dirname($projects[$target]->filename);
           }
         }
       }
@@ -1232,7 +1232,7 @@ function drush_core_execute() {
   $result = TRUE;
   // Get all of the args and options that appear after the command name.
   $args = drush_get_original_cli_args_and_options();
-  for ($x = 0; $x < sizeof($args); $x++) {
+  for ($x = 0; $x < count($args); $x++) {
     // escape all args except for command separators.
     if (!in_array($args[$x], array('&&', '||', ';'))) {
       $args[$x] = drush_escapeshellarg($args[$x]);

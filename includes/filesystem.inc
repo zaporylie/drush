@@ -101,18 +101,21 @@ function drush_dir_md5($dir) {
 }
 
 /**
- * Deletes the provided file or folder and everything inside it.
+ * Deletes the specified file or directory and everything inside it.
  *
  * Usually respects read-only files and folders. To do a forced delete use
  * drush_delete_tmp_dir() or set the parameter $forced.
  *
- * @param $dir
+ * @param string $dir
  *   The file or directory to delete.
- * @param $force
- *   Try whatever possible to delete the directory - also read-only ones.
- * @param $follow_symlinks
- *   Do not delete symlinked files. Simply unlink symbolic links.
- * @return
+ * @param bool $force
+ *   Whether or not to try everything possible to delete the directory, even if
+ *   it's read-only. Defaults to FALSE.
+ * @param bool $follow_symlinks
+ *   Whether or not to delete symlinked files. Defaults to FALSE--simply
+ *   unlinking symbolic links.
+ *
+ * @return bool
  *   FALSE on failure, TRUE if everything was deleted.
  */
 function drush_delete_dir($dir, $force = FALSE, $follow_symlinks = FALSE) {
@@ -142,13 +145,15 @@ function drush_delete_dir($dir, $force = FALSE, $follow_symlinks = FALSE) {
 }
 
 /**
- * Deletes the contents of a folder.
+ * Deletes the contents of a directory.
  *
- * @param $dir
+ * @param string $dir
  *   The directory to delete.
- * @param $force
- *   Try whatever possible to delete the directory - also read-only ones.
- * @return
+ * @param bool $force
+ *   Whether or not to try everything possible to delete the contents, even if
+ *   they're read-only. Defaults to FALSE.
+ *
+ * @return bool
  *   FALSE on failure, TRUE if everything was deleted.
  */
 function drush_delete_dir_contents($dir, $force = FALSE) {
@@ -451,7 +456,7 @@ function drush_find_tmp() {
       // If no directory has been found, create one in cwd.
       $temporary_directory = drush_cwd() . '/tmp';
       drush_mkdir($temporary_directory, TRUE);
-      if (!is_dir($directory)) {
+      if (!is_dir($temporary_directory)) {
         return drush_set_error('DRUSH_UNABLE_TO_CREATE_TMP_DIR', dt("Unable to create a temporary directory."));
       }
       drush_register_file_for_deletion($temporary_directory);
@@ -478,7 +483,8 @@ function drush_tempnam($pattern, $tmp_dir = NULL, $suffix = '') {
   }
   $tmp_file = tempnam($tmp_dir, $pattern);
   drush_register_file_for_deletion($tmp_file);
-
+  $tmp_file_with_suffix = $tmp_file . $suffix;
+  drush_register_file_for_deletion($tmp_file_with_suffix);
   return $tmp_file . $suffix;
 }
 
