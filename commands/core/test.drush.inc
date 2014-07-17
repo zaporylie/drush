@@ -79,7 +79,8 @@ function test_drush_command() {
  *  Array of test classes and groups.
  */
 function test_test_run_complete() {
-  if (drush_bootstrap_max(DRUSH_BOOTSTRAP_DRUPAL_FULL) == DRUSH_BOOTSTRAP_DRUPAL_FULL && module_exists('simpletest')) {
+  drush_include_engine('drupal', 'environment');
+  if (drush_bootstrap_max(DRUSH_BOOTSTRAP_DRUPAL_FULL) == DRUSH_BOOTSTRAP_DRUPAL_FULL && drush_module_exists('simpletest')) {
     // Retrieve all tests and groups.
     list($groups, $all_tests) = drush_test_get_all_tests();
     return array('values' => array_keys($groups) + $all_tests);
@@ -175,6 +176,7 @@ function drush_test_run_class($class) {
  * Run a single test and display any failure messages.
  */
 function simpletest_drush_run_test($class) {
+  drush_log(dt('Starting test @test.', array('@test' => $class)), 'ok');
   if (drush_drupal_major_version() >= 7) {
     $test_id = db_insert('simpletest_test_id')
     ->useDefaults(array('test_id'))

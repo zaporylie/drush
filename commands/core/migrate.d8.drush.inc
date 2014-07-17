@@ -15,16 +15,19 @@ use Drush\Migrate\DrushLogMigrateMessage;
  */
 function migrate_drush_command() {
   $items['migrate-manifest'] = array(
+    'description' => 'Execute the migrations as specified in a manifest file.',
     'arguments' => array(
       'manifest' => 'The path to the manifest file',
     ),
+    'required-arguments' => 1,
     'options' => array(
-      'db-url' => array(
+      'legacy-db-url' => array(
         'description' => 'A Drupal 6 style database URL.',
         'example-value' => 'mysql://root:pass@127.0.0.1/db',
         'required' => TRUE,
       ),
     ),
+    'drupal dependencies' => array('migrate_drupal'),
   );
   return $items;
 }
@@ -36,7 +39,7 @@ function migrate_drush_command() {
  */
 function drush_migrate_manifest($manifest) {
   if (file_exists($manifest)) {
-    $db_url = drush_get_option('db-url');
+    $db_url = drush_get_option('legacy-db-url');
     $db_spec = drush_convert_db_from_db_url($db_url);
     Database::addConnectionInfo('migrate', 'default', $db_spec);
     $list = Yaml::parse($manifest);
@@ -47,8 +50,7 @@ function drush_migrate_manifest($manifest) {
         $executable = new MigrateExecutable($migration, $message);
         $executable->import();
       }
-      include_once DRUPAL_ROOT . '/core/includes/utility.inc';
-      drupal_rebuild();
+      drush_invoke_process('@self', 'cache-rebuild', array(), array(), FALSE);
     }
     else {
       return drush_set_error('The manifest file cannot be parsed.');

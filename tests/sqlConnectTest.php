@@ -28,14 +28,14 @@ class SqlConnectCase extends CommandUnishTestCase {
     $shell_options = "-e";
     $db_driver = $this->db_driver();
     if ($db_driver == 'mysql') {
-      $this->assertRegExp('/^mysql --user=[^\s]+ --password=.* --database=[^\s]+ --host=[^\s]+$/', $output);
+      $this->assertRegExp('/^mysql --user=[^\s]+ --password=.* --database=[^\s]+ --host=[^\s]+/', $output);
     }
     elseif ($db_driver == 'sqlite') {
       $this->assertContains('sqlite3', $output);
       $shell_options = '';
     }
     elseif ($db_driver == 'pgsql') {
-      $this->assertRegExp('/^psql --dbname=[^\s]+ --host=[^\s]+ --port=[^\s]+ --username=[^\s]+/', $output);
+      $this->assertRegExp('/^psql -q --dbname=[^\s]+ --host=[^\s]+ --port=[^\s]+ --username=[^\s]+/', $output);
     }
     else {
       $this->markTestSkipped('sql-connect test does not recognize database type in ' . UNISH_DB_URL);

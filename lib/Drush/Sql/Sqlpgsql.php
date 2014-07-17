@@ -8,11 +8,33 @@ class Sqlpgsql extends SqlBase {
 
   public $query_file = "--file";
 
-  public function command() {
-    return 'psql -q';
+  private $password_file = NULL;
+
+  private function password_file() {
+    if (!isset($password_file) && isset($this->db_spec['password'])) {
+      $host = empty($this->db_spec['host']) ? 'localhost' : $this->db_spec['host'];
+      $port = empty($this->db_spec['port']) ? '5432' : $this->db_spec['port'];
+      $pgpass_contents = "{$host}:{$port}:*:{$this->db_spec['username']}:{$this->db_spec['password']}";
+      $password_file = drush_save_data_to_temp_file($pgpass_contents);
+      chmod($password_file, 0600);
+    }
+    return $password_file;
   }
 
-  public function creds() {
+  public function command() {
+    $environment = "";
+    $pw_file = $this->password_file();
+    if (isset($pw_file)) {
+      $environment = "PGPASSFILE={$pw_file} ";
+    }
+    return "{$environment}psql -q";
+  }
+
+  /*
+   * @param $hide_password
+   *   Not used in postgres. Use .pgpass file instead. See http://drupal.org/node/438828.
+   */
+  public function creds($hide_password = TRUE) {
     // Some drush commands (e.g. site-install) want to connect to the
     // server, but not the database.  Connect to the built-in database.
     $parameters['dbname'] = empty($this->db_spec['database']) ? 'template1' : $this->db_spec['database'];

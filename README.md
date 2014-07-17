@@ -14,9 +14,9 @@ Each version of Drush supports multiple Drupal versions.  Drush 6 is recommended
 
 Drush Version | Branch  | PHP | Compatible Drupal versions | Code Status
 ------------- | ------  | --- | -------------------------- | -----------
-Drush 7       | [master](https://travis-ci.org/drush-ops/drush)  | 5.3.0+ | D6, D7, D8                 | <img src="https://travis-ci.org/drush-ops/drush.png?branch=master">
-Drush 6       | [6.x](https://travis-ci.org/drush-ops/drush) | 5.3.0+ | D6, D7                     | <img src="https://travis-ci.org/drush-ops/drush.png?branch=6.x">
-Drush 5       | [5.x](https://travis-ci.org/drush-ops/drush) | 5.2.0+ | D6, D7                     | <img src="https://travis-ci.org/drush-ops/drush.png?branch=5.x">
+Drush 7       | [master](https://travis-ci.org/drush-ops/drush)  | 5.3.0+ | D6, D7, D8                 | <img src="https://travis-ci.org/drush-ops/drush.svg?branch=master">
+Drush 6       | [6.x](https://travis-ci.org/drush-ops/drush) | 5.3.0+ | D6, D7                     | <img src="https://travis-ci.org/drush-ops/drush.svg?branch=6.x">
+Drush 5       | [5.x](https://travis-ci.org/drush-ops/drush) | 5.2.0+ | D6, D7                     | <img src="https://travis-ci.org/drush-ops/drush.svg?branch=5.x">
 Drush 4       | 4.x | 5.2.0+ | D5, D6, D7                 | Unsupported
 Drush 3       | 3.x | 5.2.0+ | D5, D6                     | Unsupported
 
@@ -98,7 +98,11 @@ INSTALL/UPDATE - COMPOSER
 
 [Fuller explanation of the require command.](http://getcomposer.org/doc/03-cli.md#require)
 
-**Tip:**
+**Tips:**
+
+If Drush cannot find an autoloaded class, run `composer self-update`. Drush often
+tracks composer changes closely, so you may have some problems if you are not
+running a recent version.
 
 If composer cannot find a requirement, and suggests that *The package is not available in a stable-enough version according to your minimum-stability setting*, then place the following
 in `$HOME/.composer/composer.json`:
@@ -341,10 +345,20 @@ For multisite installations, use the -l option to target a particular site.  If
 you are outside the Drupal web root, you might need to use the -r, -l or other
 command line options just for Drush to work. If you do not specify a URI with
 -l and Drush falls back to the default site configuration, Drupal's
-$GLOBAL['base_url'] will be set to http://default.  This may cause some
+$GLOBALS['base_url'] will be set to http://default.  This may cause some
 functionality to not work as expected.
 
     $ drush -l http://example.com pm-update
+
+If you wish to be able to select your Drupal site implicitly from the
+current working directory without using the -l option, but you need your
+base_url to be set correctly, you may force it by setting the uri in
+a drushrc.php file located in the same directory as your settings.php file.
+
+**sites/default/drushrc.php:**
+```
+$options['uri'] = "http://example.com";
+```
 
 Related Options:
   ```

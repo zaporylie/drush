@@ -7,14 +7,14 @@ class Sqlsqlite extends SqlBase {
     return 'sqlite3';
   }
 
-  public function creds() {
+  public function creds($hide_password = TRUE) {
     // SQLite doesn't do user management, instead relying on the filesystem
     // for that. So the only info we really need is the path to the database
     // file, and not as a "--key=value" parameter.
     return ' '  .  $this->db_spec['database'];
   }
 
-  public function createdb_sql() {
+  public function createdb_sql($dbname, $quoted = false) {
     return '';
   }
 
@@ -67,12 +67,7 @@ class Sqlsqlite extends SqlBase {
     foreach ($tables as $table) {
       $sql .= "DROP TABLE $table; ";
     }
-    // We can't use drush_op('db_query', $sql) because it will only perform one
-    // SQL command and we're technically performing several.
-    // @todo fix.
-    $exec = _drush_sql_connect($db_spec);
-    $exec .= " '{$sql}'";
-    return drush_op_system($exec) == 0;
+    return $this->query($sql);
   }
 
   public function dumpCmd($table_selection, $file) {

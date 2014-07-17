@@ -15,7 +15,7 @@ namespace Unish;
 class contextCase extends CommandUnishTestCase {
 
   function setUpPaths() {
-    $this->log("webroot: ".$this->webroot()."\n");
+    $this->log("webroot: " . $this->webroot() . "\n", 'warning');
     $this->env = key($this->getSites());
     $this->site = $this->webroot() . '/sites/' . $this->env;
     $this->home = UNISH_SANDBOX . '/home';
@@ -35,10 +35,11 @@ class contextCase extends CommandUnishTestCase {
   }
 
   /**
-   * Try to write a tiny drushrc.php to each place that drush checks. Also
+   * Try to write a tiny drushrc.php to each place that Drush checks. Also
    * write a sites/dev/aliases.drushrc.php file to the sandbox.
    */
   function setUp() {
+    $this->markTestSkipped('@todo. no longer recognizing aliases within drupal for remote dispatch.');
     parent::setUp();
 
     if (!$this->getSites()) {

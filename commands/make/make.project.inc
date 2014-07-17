@@ -185,7 +185,7 @@ class DrushMakeProject {
       $this->processGitInfoFiles();
     }
     // Clean-up .git directories.
-    if (!drush_get_option('working-copy') && (empty($this->options['working-copy']) ||  !_make_is_override_allowed('working-copy'))) {
+    if (!_get_working_copy_option($this->download)) {
       $this->removeGitDirectory();
     }
     if (!$this->recurse($this->download_location)) {
@@ -557,7 +557,7 @@ class DrushMakeProject {
       }
       $build_path = $this->buildPath($this->name);
       make_projects(TRUE, trim($build_path, '/'), $info, $this->build_path, $this->download_location);
-      make_libraries(trim($build_path, '/'), $info, $this->build_path, $this->download_location);
+      make_libraries(TRUE, trim($build_path, '/'), $info, $this->build_path, $this->download_location);
       $result = TRUE;
     }
     // Restore original 'custom' context so that any

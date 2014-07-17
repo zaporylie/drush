@@ -150,20 +150,22 @@ function sql_drush_command() {
     'aliases' => array('sqlq'),
   );
   $items['sql-sync'] = array(
-    'description' => 'Copy and import source database to target database. Transfers via rsync.',
+    'description' => 'Copies the database contents from a source site to a target site. Transfers the database dump via rsync.',
     'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
     'drush dependencies' => array('core'), // core-rsync.
     'examples' => array(
-      'drush sql-sync @prod @dev' => 'Copy the DB defined in sites/prod to the DB in sites/dev.',
+      'drush sql-sync @source @target' => 'Copy the database from the site with the alias "source" to the site with the alias "target".',
+      'drush sql-sync prod dev' => 'Copy the database from the site in /sites/prod to the site in /sites/dev (multisite installation).',
     ),
     'arguments' => array(
-      'from' => 'Name of subdirectory within /sites or a site-alias.',
-      'to' => 'Name of subdirectory within /sites or a site-alias.',
+      'source' => 'A site-alias or the name of a subdirectory within /sites whose database you want to copy from.',
+      'target' => 'A site-alias or the name of a subdirectory within /sites whose database you want to replace.',
     ),
+    'required-arguments' => TRUE,
     'options' => array(
-      'skip-tables-key' => 'A key in the $skip_tables array. @see example.drushrc.php. Optional.',
+      'skip-tables-key' => 'A key in the $skip_tables array. See example.drushrc.php. Optional.',
       'skip-tables-list' => 'A comma-separated list of tables to exclude completely. Optional.',
-      'structure-tables-key' => 'A key in the $structure_tables array. @see example.drushrc.php. Optional.',
+      'structure-tables-key' => 'A key in the $structure_tables array. See example.drushrc.php. Optional.',
       'structure-tables-list' => 'A comma-separated list of tables to include for structure, but not data. Optional.',
       'tables-key' => 'A key in the $tables array. Optional.',
       'tables-list' => 'A comma-separated list of tables to transfer. Optional.',
@@ -312,6 +314,7 @@ function drush_sql_connect() {
  * Command callback. Create a database.
  */
 function drush_sql_create() {
+  drush_sql_bootstrap_further();
   $sql = drush_sql_get_class();
   $db_spec = $sql->db_spec();
   // Prompt for confirmation.
@@ -419,7 +422,6 @@ function drush_sql_filter_tables($tables, $db_tables) {
  *   `*` wildcard character.
  * @param array $db_tables
  *   The list of tables present in a database.
-  $db_tables = _drush_sql_get_db_table_list($db_spec, $site_record);
  * @return array
  *   An array of tables with non-existant tables removed.
  */

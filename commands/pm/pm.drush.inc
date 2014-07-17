@@ -271,7 +271,7 @@ function pm_drush_command() {
       'projects' => 'A list of project names, with optional version. Defaults to \'drupal\'',
     ),
     'options' => array(
-      'html' => dt('Display releasenotes in HTML rather than plain text.'),
+      'html' => dt('Display release notes in HTML rather than plain text.'),
     ),
     'examples' => array(
       'drush rln cck' => 'Prints the release notes for the recommended version of CCK project.',
@@ -291,6 +291,9 @@ function pm_drush_command() {
     ),
     'examples' => array(
       'drush pm-releases cck zen' => 'View releases for cck and Zen projects for your Drupal version.',
+    ),
+    'options' => array(
+      'default-major' => 'Show releases compatible with the specified major version of Drupal.',
     ),
     'aliases' => array('rl'),
     'bootstrap' => DRUSH_BOOTSTRAP_MAX,
@@ -462,7 +465,7 @@ function _drush_pm_sort_extensions($a, $b) {
 }
 
 /**
- * Calculate a extension status based on current status and schema version.
+ * Calculate an extension status based on current status and schema version.
  *
  * @param $extension
  *   Object of a single extension info.
@@ -549,11 +552,12 @@ function drush_get_projects(&$extensions = NULL) {
       else {
         $extension_name = drush_extension_get_name($extension);
         $extension_path = drush_extension_get_path($extension);
-        if (is_dir($extension_path . '/CVS') && (!module_exists('cvs_deploy'))) {
+        drush_include_engine('drupal', 'environment');
+        if (is_dir($extension_path . '/CVS') && (!drush_module_exists('cvs_deploy'))) {
           $extension->vcs = 'cvs';
           drush_log(dt('Extension !extension is fetched from cvs. Ignoring.', array('!extension' => $extension_name)), 'debug');
         }
-        elseif (is_dir($extension_path . '/.git') && (!module_exists('git_deploy'))) {
+        elseif (is_dir($extension_path . '/.git') && (!drush_module_exists('git_deploy'))) {
           $extension->vcs = 'git';
           drush_log(dt('Extension !extension is fetched from git. Ignoring.', array('!extension' => $extension_name)), 'debug');
         }
@@ -1015,6 +1019,7 @@ function drush_pm_enable() {
 
   // Enable modules and pass dependency validation in form submit.
   if (!empty($modules)) {
+    drush_include_engine('drupal', 'environment');
     drush_module_enable($modules);
   }
 
@@ -1081,7 +1086,6 @@ function _drush_pm_expand_extensions(&$extensions, $extension_info = array()) {
 
 /**
  * Command callback. Uninstall one or more modules.
- * // TODO: Use drupal_execute on system_modules_uninstall_confirm_form so that input is validated.
  */
 function drush_pm_uninstall() {
   $args = pm_parse_arguments(func_get_args());
@@ -1465,7 +1469,7 @@ interface drush_version_control {
 
 /**
  * A simple factory function that tests for version control systems, in a user
- * specified order, and return the one that appears to be appropriate for a
+ * specified order, and returns the one that appears to be appropriate for a
  * specific directory.
  */
 function drush_pm_include_version_control($directory = '.') {

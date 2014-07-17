@@ -67,8 +67,8 @@ function _drush_php_ini_loaded_file_message() {
 function _drush_postmortem() {
   // Make sure that the memory limit has been bumped up from the minimum default value of 32M.
   $php_memory_limit = drush_memory_limit();
-  if (($php_memory_limit > 0) && ($php_memory_limit <= 32*DRUSH_DRUPAL_KILOBYTE*DRUSH_DRUPAL_KILOBYTE)) {
-    drush_set_error('DRUSH_MEMORY_LIMIT', dt('Your memory limit is set to !memory_limit; Drush needs as much memory to run as Drupal.  !php_ini_msg', array('!memory_limit' => $php_memory_limit / (DRUSH_DRUPAL_KILOBYTE*DRUSH_DRUPAL_KILOBYTE) . 'M', '!php_ini_msg' => _drush_php_ini_loaded_file_message())));
+  if (($php_memory_limit > 0) && ($php_memory_limit <= 32*DRUSH_KILOBYTE*DRUSH_KILOBYTE)) {
+    drush_set_error('DRUSH_MEMORY_LIMIT', dt('Your memory limit is set to !memory_limit; Drush needs as much memory to run as Drupal.  !php_ini_msg', array('!memory_limit' => $php_memory_limit / (DRUSH_KILOBYTE*DRUSH_KILOBYTE) . 'M', '!php_ini_msg' => _drush_php_ini_loaded_file_message())));
   }
 }
 
@@ -480,6 +480,10 @@ function drush_build_drush_command($drush_path = NULL, $php = NULL, $os = NULL, 
       }
       if ($php_options_alias = drush_get_option('php-options', NULL, 'alias')) {
         $environment_variables[] = 'PHP_OPTIONS=' . drush_escapeshellarg($php_options_alias, $os);
+      }
+      $columns = drush_get_context('DRUSH_COLUMNS');
+      if (($columns) && ($columns != 80)) {
+        $environment_variables[] = 'COLUMNS=' . $columns;
       }
       $prefix = implode(' ', $environment_variables);
     }

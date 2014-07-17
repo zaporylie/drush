@@ -78,7 +78,7 @@ function drush_core_site_install_validate() {
       drush_set_option('sites-subdir', $lower);
     }
     // Make sure that we will bootstrap to the 'sites-subdir' site.
-    drush_set_option('uri', 'http://' . $sites_subdir);
+    drush_set_context('DRUSH_SELECTED_URI', 'http://' . $sites_subdir);
   }
 }
 
@@ -92,6 +92,9 @@ function drush_core_pre_site_install($profile = NULL) {
     return;
   }
 
+  // Make sure URI is set so we get back a proper $alias_record. Needed for quick-drupal.
+  _drush_bootstrap_selected_uri();
+
   $alias_record = drush_sitealias_get_record('@self');
   $sites_subdir = drush_sitealias_local_site_path($alias_record);
   // Override with sites-subdir if specified.
@@ -103,7 +106,7 @@ function drush_core_pre_site_install($profile = NULL) {
   $files = !empty($GLOBALS['conf']['files_public_path']) ? $GLOBALS['conf']['files_public_path'] : "$conf_path/files";
   $settingsfile = "$conf_path/settings.php";
   $sitesfile = "sites/sites.php";
-  $default = $alias_record['root'] . '/sites/default';
+  $default = realpath($alias_record['root'] . '/sites/default');
   $sitesfile_write = drush_drupal_major_version() >= 8 && $conf_path != $default && !file_exists($sitesfile);
   
   if (!file_exists($settingsfile)) {
@@ -111,9 +114,6 @@ function drush_core_pre_site_install($profile = NULL) {
   }
   if ($sitesfile_write) {
     $msg[] = dt('create a @sitesfile file', array('@sitesfile' => $sitesfile));
-  }
-  if (drush_drupal_major_version() >= 8) {
-    $msg[] = dt('empty any Config directories');
   }
   if ($sql->db_exists()) {
     $msg[] = dt("DROP all tables in your '@db' database.", array('@db' => $db_spec['database']));
@@ -253,6 +253,15 @@ function drush_core_site_install($profile = NULL) {
     // Subsequent arguments are additional form values.
     foreach ($args as $arg) {
       list($key, $value) = explode('=', $arg);
+
+      // Allow for numeric and NULL values to be passed in.
+      if (is_numeric($value)) {
+        $value = intval($value);
+      }
+      elseif ($value == 'NULL') {
+        $value = NULL;
+      }
+
       $form_options[$key] = $value;
     }
   }

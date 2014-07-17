@@ -16,7 +16,7 @@ class SqlBase {
   /**
    * Typically, SqlBase objects are contructed via drush_sql_get_class().
    */
-  public function __construct($db_spec = NULL, $site_alias_record = NULL) {
+  public function __construct($db_spec = NULL) {
     $this->db_spec = $db_spec;
   }
 
@@ -157,17 +157,11 @@ class SqlBase {
       }
     }
 
-    if ($input_file) {
-      $query = file_get_contents($input_file);
-    }
-    $query = $this->query_prefix($query);
-    $query = $this->query_format($query);
-
     // Save $query to a tmp file if needed. We will redirect it in.
     if (!$input_file) {
-      // @todo
-      $suffix = '';
-      $input_file = drush_save_data_to_temp_file($query, $suffix);
+      $query = $this->query_prefix($query);
+      $query = $this->query_format($query);
+      $input_file = drush_save_data_to_temp_file($query);
     }
 
     $parts = array(
@@ -372,11 +366,11 @@ class SqlBase {
     $create_db_target = $this->db_spec;
 
     $create_db_target['database'] = '';
-    $db_superuser = drush_sitealias_get_option($this->site_alias_record, 'db-su');
+    $db_superuser = drush_get_option('db-su');
     if (isset($db_superuser)) {
       $create_db_target['username'] = $db_superuser;
     }
-    $db_su_pw = drush_sitealias_get_option($this->site_alias_record, 'db-su-pw');
+    $db_su_pw = drush_get_option('db-su-pw');
     // If --db-su-pw is not provided and --db-su is, default to empty password.
     // This way db cli command will take password from .my.cnf or .pgpass.
     if (!empty($db_su_pw)) {
