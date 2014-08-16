@@ -18,7 +18,7 @@ function drush_core_site_install_version($profile, array $additional_form_option
   $settings = array(
     'parameters' => array(
       'profile' => $profile,
-      'locale' => drush_get_option('locale', 'en'),
+      (drush_drupal_major_version() === 7 ? 'locale' : 'langcode') => drush_get_option('locale', 'en'),
     ),
     'forms' => array(
       'install_settings_form' => array(
@@ -56,7 +56,7 @@ function drush_core_site_install_version($profile, array $additional_form_option
     $current = $value;
   }
 
-  drush_log(dt('Starting Drupal installation. This takes a few seconds ...'), 'ok');
+  drush_log(dt('Starting Drupal installation. This takes a while. Consider using the --notify global option.'), 'ok');
   drush_op('install_drupal', $settings);
   drush_log(dt('Installation complete.  User name: @name  User password: @pass', array('@name' => $account_name, '@pass' => $account_pass)), 'ok');
 }

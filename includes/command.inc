@@ -1358,15 +1358,11 @@ function _drush_add_commandfiles($searchpath, $phase = NULL, $reset = FALSE) {
       // Assemble a cid specific to the bootstrap phase and searchpaths.
       // Bump $cf_version when making a change to a dev version of Drush
       // that invalidates the commandfile cache.
-      $cf_version = 3;
+      $cf_version = 4;
       $cid = drush_get_cid('commandfiles-' . $phase, array(), array_merge($searchpath, array($cf_version)));
       $command_cache = drush_cache_get($cid);
       if (isset($command_cache->data)) {
         $cached_list = $command_cache->data;
-        // Take drush_make out of the cache to help people transitioning
-        // from using drush make as a contrib module to drush make in core.
-        // See: http://drupal.org/node/1366746
-        unset($cached_list['drush_make']);
         // If we want to temporarily ignore modules via 'ignored-modules',
         // then we need to take these out of the cache as well.
         foreach (drush_get_option_list('ignored-modules') as $ignored) {
@@ -1391,8 +1387,7 @@ function _drush_add_commandfiles($searchpath, $phase = NULL, $reset = FALSE) {
           foreach ($files as $filename => $info) {
             $module = basename($filename);
             $module = preg_replace('/\.*drush[0-9]*\.inc/', '', $module);
-            // Only try to bootstrap modules that we have never seen before, or that we
-            // have tried to load but did not due to an unmet _drush_load() requirement.
+            // Only try to bootstrap modules that we have never seen before.
             if (!array_key_exists($module, $evaluated) && file_exists($filename)) {
               $evaluated[$module] = TRUE;
               $list[$module] = $filename;

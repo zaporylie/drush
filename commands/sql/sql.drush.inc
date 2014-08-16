@@ -112,10 +112,9 @@ function sql_drush_command() {
       'skip-tables-list' => 'A comma-separated list of tables to exclude completely. Optional.',
       'structure-tables-list' => 'A comma-separated list of tables to include for structure, but not data. Optional.',
       'tables-list' => 'A comma-separated list of tables to transfer. Optional.',
-      'ordered-dump' => 'Use this option to output ordered INSERT statements in the sql-dump.Useful when backups are managed in a Version Control System. Optional.',
       'create-db' => array('hidden' => TRUE, 'description' => 'Omit DROP TABLE statements. Postgres and Oracle only.  Used by sql-sync, since including the DROP TABLE statements interfere with the import when the database is created.'),
       'data-only' => 'Dump data without statements to create any of the schema.',
-      'ordered-dump' => 'Order by primary key and add line breaks for efficient diff in revision control. Also, faster rsync. Slows down the dump. Mysql only.',
+      'ordered-dump' => 'Order by primary key and add line breaks for efficient diff in revision control. Slows down the dump. Mysql only.',
       'gzip' => 'Compress the dump using the gzip program which must be in your $PATH.',
     ) + $options + $db_url,
   );
@@ -269,18 +268,10 @@ function sql_sql_sync_complete() {
 }
 
 /**
- * Check whether further bootstrap is needed. If so, do it.
+ * Safely bootstrap Drupal to the point where we can
+ * access the database configuration.
  */
-function drush_sql_bootstrap_further() {
-  if (!drush_get_option(array('db-url', 'db-spec'))) {
-    drush_bootstrap_max(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-  }
-}
-
-/**
- * Command callback. Displays the Drupal site's database connection string.
- */
-function drush_sql_conf() {
+function drush_sql_bootstrap_database_configuration() {
   // Under Drupal 7, if the database is configured but empty, then
   // DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION will throw an exception.
   // If this happens, we'll just catch it and continue.
@@ -290,7 +281,22 @@ function drush_sql_conf() {
   }
   catch (Exception $e) {
   }
+}
 
+/**
+ * Check whether further bootstrap is needed. If so, do it.
+ */
+function drush_sql_bootstrap_further() {
+  if (!drush_get_option(array('db-url', 'db-spec'))) {
+    drush_sql_bootstrap_database_configuration();
+  }
+}
+
+/**
+ * Command callback. Displays the Drupal site's database connection string.
+ */
+function drush_sql_conf() {
+  drush_sql_bootstrap_database_configuration();
   if (drush_get_option('all')) {
     $sqlVersion = drush_sql_get_version();
     return $sqlVersion->getAll();
@@ -482,12 +488,22 @@ function drush_sql_query($query = NULL) {
   if (drush_get_option('db-prefix')) {
     drush_bootstrap_max(DRUSH_BOOTSTRAP_DRUPAL_DATABASE);
   }
-  $sql = drush_sql_get_class(drush_get_option('db-spec'));
-  $result = $sql->query($query, $filename, FALSE, drush_get_option('result-file'));
-  if (!$result) {
-    return drush_set_error('DRUSH_SQL_NO_QUERY', dt('Query failed.'));
+  if (drush_get_context('DRUSH_SIMULATE')) {
+    if ($query) {
+      drush_print(dt('Simulating sql-query: !q', array('!q' => $query)));
+    }
+    else {
+      drush_print(dt('Simulating sql-import from !f', array('!f' => drush_get_option('file'))));
+    }
   }
-  drush_print(implode("\n", drush_shell_exec_output()));
+  else {
+    $sql = drush_sql_get_class(drush_get_option('db-spec'));
+    $result = $sql->query($query, $filename, FALSE, drush_get_option('result-file'));
+    if (!$result) {
+      return drush_set_error('DRUSH_SQL_NO_QUERY', dt('Query failed.'));
+    }
+    drush_print(implode("\n", drush_shell_exec_output()));
+  }
   return TRUE;
 }
 
