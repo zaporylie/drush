@@ -26,7 +26,13 @@ function _drush_backend_batch_process($command = 'batch-process', $args, $option
     // The batch is now completely built. Allow other modules to make changes
     // to the batch so that it is easier to reuse batch processes in other
     // enviroments.
-    drupal_alter('batch', $batch);
+    if (drush_drupal_major_version() >= 8) {
+      \Drupal::moduleHandler()->alter('batch', $batch);
+    }
+    else {
+      drupal_alter('batch', $batch);
+    }
+
     // Assign an arbitrary id: don't rely on a serial column in the 'batch'
     // table, since non-progressive batches skip database storage completely.
     $batch['id'] = db_next_id();
@@ -45,7 +51,7 @@ function _drush_backend_batch_process($command = 'batch-process', $args, $option
       ->fields(array(
         'bid' => $batch['id'],
         'timestamp' => REQUEST_TIME,
-        'token' => drupal_get_token($batch['id']),
+        'token' => drush_get_token($batch['id']),
         'batch' => serialize($batch),
       ))
       ->execute();
@@ -218,7 +224,9 @@ function _drush_batch_finished() {
       if (function_exists($batch_set['finished'])) {
         $queue = _batch_queue($batch_set);
         $operations = $queue->getAllItems();
-        $batch_set['finished']($batch_set['success'], $batch_set['results'], $operations, format_interval($batch_set['elapsed'] / 1000));
+        $elapsed = $batch_set['elapsed'] / 1000;
+        $elapsed = drush_drupal_major_version() >=8 ? Drupal::service('date.formatter')->formatInterval($elapsed) : format_interval($elapsed);
+        $batch_set['finished']($batch_set['success'], $batch_set['results'], $operations, $elapsed);
       }
     }
   }

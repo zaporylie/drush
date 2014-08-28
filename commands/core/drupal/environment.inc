@@ -203,7 +203,7 @@ function drush_module_enable($modules) {
  *   Array of module names
  */
 function drush_module_disable($modules) {
-  drush_set_error('DRUSH_MODULE_DISABLE', dt('Drupal 8 does not support disabling modules.'));
+  drush_set_error('DRUSH_MODULE_DISABLE', dt('Drupal 8 does not support disabling modules. Use pm-uninstall instead.'));
 }
 
 /**
@@ -326,7 +326,7 @@ function drush_queue_get_queues() {
   static $queues;
   if (!isset($queues)) {
     $queues = \Drupal::moduleHandler()->invokeAll('queue_info');
-    drupal_alter('queue_info', $queues);
+    \Drupal::moduleHandler()->alter('queue_info', $queues);
   }
   return $queues;
 }
@@ -382,5 +382,12 @@ function _drush_extension_get_type($info) {
  */
 function _drush_extension_get_path($info) {
   return $info->getPath();
+}
+
+/*
+ * Wrapper for CSRF token generation.
+ */
+function drush_get_token($value = NULL) {
+  return \Drupal::csrfToken()->get($value);
 }
 
