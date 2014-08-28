@@ -38,9 +38,6 @@ env:
     - UNISH_DRUPAL_MAJOR_VERSION=8 UNISH_DB_URL=mysql://root:@127.0.0.1 PHPUNIT_ARGS=--group=pm
     - UNISH_DRUPAL_MAJOR_VERSION=8 UNISH_DB_URL=mysql://root:@127.0.0.1 PHPUNIT_ARGS=--group=quick-drupal
     - UNISH_DRUPAL_MAJOR_VERSION=8 UNISH_DB_URL=mysql://root:@127.0.0.1 PHPUNIT_ARGS=--exclude-group=base,make,commands,pm,quick-drupal
-matrix:
-  exclude:
-    - UNISH_DB_URL=pgsql://postgres:@localhost UNISH_DRUPAL_MAJOR_VERSION=8
 before_install: composer selfupdate
 install: composer install
 
