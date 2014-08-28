@@ -9,30 +9,29 @@ branches:
     - 5.x-fulltest
 language: php
 php:
-  - 5.3
-  - 5.5
+  - 5.4
 env:
   global:
     - UNISH_NO_TIMEOUTS=y
-  matrix:
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=mysql://root:@127.0.0.1 PHPUNIT_ARGS=--group=make
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=mysql://root:@127.0.0.1 PHPUNIT_ARGS=--group=base
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=mysql://root:@127.0.0.1 PHPUNIT_ARGS=--group=commands
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=mysql://root:@127.0.0.1 PHPUNIT_ARGS=--group=pm
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=mysql://root:@127.0.0.1 PHPUNIT_ARGS=--group=quick-drupal
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=mysql://root:@127.0.0.1 PHPUNIT_ARGS=--exclude-group=base,make,commands,pm,quick-drupal
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=sqlite://none/of/this/matters PHPUNIT_ARGS=--group=make
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=sqlite://none/of/this/matters PHPUNIT_ARGS=--group=base
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=sqlite://none/of/this/matters PHPUNIT_ARGS=--group=commands
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=sqlite://none/of/this/matters PHPUNIT_ARGS=--group=pm
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=sqlite://none/of/this/matters PHPUNIT_ARGS=--group=quick-drupal
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=sqlite://none/of/this/matters PHPUNIT_ARGS=--exclude-group=base,make,commands,pm,quick-drupal
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=pgsql://postgres:@localhost PHPUNIT_ARGS=--group=make
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=pgsql://postgres:@localhost PHPUNIT_ARGS=--group=base
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=pgsql://postgres:@localhost PHPUNIT_ARGS=--group=commands
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=pgsql://postgres:@localhost PHPUNIT_ARGS=--group=pm
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=pgsql://postgres:@localhost PHPUNIT_ARGS=--group=quick-drupal
-  - UNISH_DRUPAL_MAJOR_VERSION=7 UNISH_DB_URL=pgsql://postgres:@localhost PHPUNIT_ARGS=--exclude-group=base,make,commands,pm,quick-drupal
+#
+  UNISH_DRUPAL_MAJOR_VERSION=6
+  UNISH_DRUPAL_MAJOR_VERSION=7
+  UNISH_DRUPAL_MAJOR_VERSION=8
+  UNISH_DB_URL=mysql://root:@127.0.0.1
+  UNISH_DB_URL=sqlite://none/of/this/matters
+  UNISH_DB_URL=pgsql://postgres:@localhost
+  PHPUNIT_ARGS=--group=make
+  PHPUNIT_ARGS=--group=base
+  PHPUNIT_ARGS=--group=commands
+  PHPUNIT_ARGS=--group=pm
+  PHPUNIT_ARGS=--group=quick-drupal
+  PHPUNIT_ARGS=--exclude-group=base,make,commands,pm,quick-drupal
+matrix:
+  exclude
+      - UNISH_DRUPAL_MAJOR_VERSION=8
+        UNISH_DB_URL=pgsql://postgres:@localhost
+      - UNISH_DRUPAL_MAJOR_VERSION=8
+        UNISH_DB_URL=sqlite://none/of/this/matters
 
 before_install: composer selfupdate
 install: composer install
