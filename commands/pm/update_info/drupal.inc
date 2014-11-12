@@ -1,17 +1,32 @@
 <?php
 
+/**
+ * @file
+ * Implementation of 'drupal' update_info engine for Drupal >= 7.
+ */
+
+/**
+ * Returns a human readable message based on update status of a project.
+ *
+ * It also may alter the project object and set $project['updateable']
+ * and $project['candidate_version'].
+ *
+ * @see pm_release_recommended()
+ *
+ * Project statuses in Drupal >=7 are:
+ * - UPDATE_NOT_SECURE
+ * - UPDATE_REVOKED
+ * - UPDATE_NOT_SUPPORTED
+ * - UPDATE_NOT_CURRENT
+ * - UPDATE_CURRENT
+ * - UPDATE_NOT_CHECKED
+ * - UPDATE_UNKNOWN
+ * - UPDATE_NOT_FETCHED
+ * - UPDATE_FETCH_PENDING
+ *
+ */
 function pm_update_filter(&$project) {
-  $update = FALSE;
   switch($project['status']) {
-    case UPDATE_CURRENT:
-      $status = dt('Up to date');
-      pm_release_recommended($project);
-      $project['updateable'] = FALSE;
-      break;
-    case UPDATE_NOT_CURRENT:
-      $status = dt('Update available');
-      pm_release_recommended($project);
-      break;
     case UPDATE_NOT_SECURE:
       $status = dt('SECURITY UPDATE available');
       pm_release_recommended($project);
@@ -24,9 +39,21 @@ function pm_update_filter(&$project) {
       $status = dt('Installed version not supported');
       pm_release_recommended($project);
       break;
+    case UPDATE_NOT_CURRENT:
+      $status = dt('Update available');
+      pm_release_recommended($project);
+      break;
+    case UPDATE_CURRENT:
+      $status = dt('Up to date');
+      pm_release_recommended($project);
+      $project['updateable'] = FALSE;
+      break;
     case UPDATE_NOT_CHECKED:
       $status = dt('Unable to check status');
       break;
+    case UPDATE_UNKNOWN:
+    case UPDATE_NOT_FETCHED:
+    case UPDATE_FETCH_PENDING:
     default:
       $status = dt('Unknown');
       break;
@@ -34,6 +61,9 @@ function pm_update_filter(&$project) {
   return $status;
 }
 
+/**
+ * Returns time of last check of available updates.
+ */
 // @todo This moved to state() in D8.
 function pm_update_last_check() {
   return variable_get('update_last_check', 0);
@@ -68,7 +98,9 @@ function _pm_get_update_info($projects) {
   // for those we have no information or is obsolete.
   module_load_include('inc', 'update', 'update.compare');
   $available = _update_get_cached_available_releases();
+
   $update_projects = update_get_projects();
+
   foreach ($update_projects as $key => $project) {
     if (empty($available[$key])) {
       update_create_fetch_task($project);
@@ -131,28 +163,3 @@ function _pm_get_update_info($projects) {
   return $data;
 }
 
-function pm_get_project_info($projects) {
-  $data = array();
-  include_once drupal_get_path('module', 'update') .'/update.fetch.inc';
-
-  foreach ($projects as $project_name => $project) {
-    $url = UPDATE_DEFAULT_URL. "/$project_name/". drush_drupal_major_version() . '.x';
-    $xml = drupal_http_request($url);
-    if (isset($xml->error)) {
-      drush_set_error(dt(
-        'HTTP Request to @request has failed. @error',
-        array('@request' => $xml->request, '@error' => $xml->error)
-      ));
-    }
-    elseif (!$info = update_parse_xml($xml->data)) {
-      drush_set_error(dt(
-        'No release history found for @project_name',
-        array('@project_name' => $project_name)
-      ));
-    }
-    else {
-      $data[$project_name] = $info;
-    }
-  }
-  return $data;
-}

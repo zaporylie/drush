@@ -1,16 +1,31 @@
 <?php
 
+/**
+ * @file
+ * Implementation of 'drupal' update_info engine for Drupal 6.
+ */
+
+/**
+ * Returns a human readable message based on update status of a project.
+ *
+ * It also may alter the project object and set $project['updateable']
+ * and $project['candidate_version'].
+ *
+ * @see pm_release_recommended()
+ *
+ * Project statuses in Drupal 6 are:
+ * - UPDATE_NOT_SECURE
+ * - UPDATE_REVOKED
+ * - UPDATE_NOT_SUPPORTED
+ * - UPDATE_NOT_CURRENT
+ * - UPDATE_CURRENT
+ * - UPDATE_NOT_CHECKED
+ * - UPDATE_UNKNOWN
+ * - UPDATE_NOT_FETCHED
+ *
+ */
 function pm_update_filter(&$project) {
-  $update = FALSE;
   switch($project['status']) {
-    case UPDATE_CURRENT:
-      $status = dt('Up to date');
-      $project['candidate_version'] = $project['recommended'];
-      break;
-    case UPDATE_NOT_CURRENT:
-      $status = dt('Update available');
-      pm_release_recommended($project);
-      break;
     case UPDATE_NOT_SECURE:
       $status = dt('SECURITY UPDATE available');
       pm_release_recommended($project);
@@ -23,9 +38,19 @@ function pm_update_filter(&$project) {
       $status = dt('Installed version not supported');
       pm_release_recommended($project);
       break;
+    case UPDATE_NOT_CURRENT:
+      $status = dt('Update available');
+      pm_release_recommended($project);
+      break;
     case UPDATE_NOT_CHECKED:
       $status = dt('Unable to check status');
       break;
+    case UPDATE_CURRENT:
+      $status = dt('Up to date');
+      $project['candidate_version'] = $project['recommended'];
+      break;
+    case UPDATE_UNKNOWN:
+    case UPDATE_NOT_FETCHED:
     default:
       $status = dt('Unknown');
       break;
@@ -33,6 +58,9 @@ function pm_update_filter(&$project) {
   return $status;
 }
 
+/**
+ * Returns time of last check of available updates.
+ */
 function pm_update_last_check() {
   return variable_get('update_last_check', 0);
 }
@@ -49,7 +77,8 @@ function _pm_refresh() {
 /**
  * Get update information for all installed projects.
  *
- * @return An array containing remote and local versions for all installed projects
+ * @return An array containing remote and local versions for all
+ *   installed projects.
  */
 function _pm_get_update_info($projects) {
   // We force a refresh if the cache is not available.
@@ -92,23 +121,3 @@ function _pm_get_update_info($projects) {
   return $data;
 }
 
-/**
- * Get project information from drupal.org.
- *
- * @param $projects An array of project names
- */
-function pm_get_project_info($projects) {
-  $info = array();
-  $data = array();
-  foreach ($projects as $project_name => $project) {
-    $url = UPDATE_DEFAULT_URL. "/$project_name/". drush_drupal_major_version() . '.x';
-    $xml = drupal_http_request($url);
-    $data[] = $xml->data;
-  }
-  if ($data) {
-    include_once drupal_get_path('module', 'update') .'/update.fetch.inc';
-    $parser = new update_xml_parser;
-    $info = $parser->parse($data);
-  }
-  return $info;
-}

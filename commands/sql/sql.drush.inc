@@ -1,7 +1,8 @@
 <?php
 
 /**
- * @file Drush sql commands
+ * @file
+ * Drush sql commands
  */
 
 /**
@@ -232,6 +233,7 @@ function sql_drush_command() {
     'description' => "Run sanitization operations on the current database.",
     'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
     'options' => array(
+      'db-prefix' => 'Enable replacement of braces in sanitize queries.',
       'sanitize-password' => 'The password to assign to all accounts in the sanitization operation, or "no" to keep passwords unchanged.  Default is "password".',
       'sanitize-email' => 'The pattern for test email addresses in the sanitization operation, or "no" to keep email addresses unchanged.  May contain replacement patterns %uid, %mail or %name.  Default is "user+%uid@localhost".',
     ) + $db_url,
@@ -304,13 +306,6 @@ function drush_sql_conf() {
  */
 function _drush_sql_connect($db_spec = NULL) {
   switch (_drush_sql_get_scheme($db_spec)) {
-    case 'mysql':
-      $command = 'mysql';
-      if (drush_get_option('A', FALSE)) {
-        $command .= ' -A';
-      }
-
-      break;
     case 'pgsql':
       $command = 'psql';
       break;
@@ -329,6 +324,13 @@ function _drush_sql_connect($db_spec = NULL) {
       else {
         $command = 'sqlplus';
       }
+      break;
+    default:
+      $command = 'mysql';
+      if (drush_get_option('A', FALSE)) {
+        $command .= ' -A';
+      }
+
       break;
   }
   $command .= _drush_sql_get_credentials($db_spec);
@@ -1009,6 +1011,9 @@ function drush_sql_cli() {
  */
 function drush_sql_sanitize() {
   drush_sql_bootstrap_further();
+  if (drush_get_option('db-prefix')) {
+    drush_bootstrap_max(DRUSH_BOOTSTRAP_DRUPAL_DATABASE);
+  }
   drush_include(DRUSH_BASE_PATH . '/commands/sql', 'sync.sql');
   drush_command_invoke_all('drush_sql_sync_sanitize', 'default');
   $options = drush_get_context('post-sync-ops');
@@ -1027,6 +1032,15 @@ function drush_sql_sanitize() {
 
   $sanitize_query = '';
   foreach($options as $id => $data) {
+    // Enable prefix processing when db-prefix option is used.
+    if (drush_get_option('db-prefix')) {
+      if (drush_drupal_major_version() >= 7) {
+        $data['query'] = Database::getConnection()->prefixTables($data['query']);
+      }
+      else {
+        $data['query'] = db_prefix_tables($data['query']);
+      }
+    }
     $sanitize_query .= $data['query'] . " ";
   }
   if ($sanitize_query) {
@@ -1221,34 +1235,6 @@ function _drush_sql_get_credentials($db_spec = NULL) {
   $parameters = array();
 
   switch (_drush_sql_get_scheme($db_spec)) {
-    case 'mysql':
-      // Some drush commands (e.g. site-install) want to connect to the
-      // server, but not the database.  Connect to the built-in database.
-      $parameters['database'] = empty($db_spec['database']) ? 'information_schema' : $db_spec['database'];
-
-      // Default to unix socket if configured.
-      if (!empty($db_spec['unix_socket'])) {
-        $parameters['socket'] = $db_spec['unix_socket'];
-      }
-      // EMPTY host is not the same as NO host, and is valid (see unix_socket).
-      elseif (isset($db_spec['host'])) {
-        $parameters['host'] = $db_spec['host'];
-      }
-
-      // User is required. Drupal calls it 'username'. MySQL calls it 'user'.
-      $parameters['user'] = $db_spec['username'];
-
-      // EMPTY password is not the same as NO password, and is valid.
-      if (isset($db_spec['password'])) {
-        $parameters['password'] = $db_spec['password'];
-      }
-
-      if (!empty($db_spec['port'])) {
-        $parameters['port'] = $db_spec['port'];
-      }
-      
-      break;
-
     case 'pgsql':
       // Some drush commands (e.g. site-install) want to connect to the
       // server, but not the database.  Connect to the built-in database.
@@ -1286,6 +1272,34 @@ function _drush_sql_get_credentials($db_spec = NULL) {
       // Return an Oracle connection string
       return ' ' . $db_spec['username'] .'/' . $db_spec['password'] . ($db_spec['host']=='USETNS' ? '@' . $db_spec['database'] : '@//' . $db_spec['host'] . ':' . ($db_spec['port'] ? $db_spec['port'] : '1521') . '/' . $db_spec['database']);
       break;
+
+    default:
+    // Some drush commands (e.g. site-install) want to connect to the
+    // server, but not the database.  Connect to the built-in database.
+    $parameters['database'] = empty($db_spec['database']) ? 'information_schema' : $db_spec['database'];
+
+    // Default to unix socket if configured.
+    if (!empty($db_spec['unix_socket'])) {
+      $parameters['socket'] = $db_spec['unix_socket'];
+    }
+    // EMPTY host is not the same as NO host, and is valid (see unix_socket).
+    elseif (isset($db_spec['host'])) {
+      $parameters['host'] = $db_spec['host'];
+    }
+
+    // User is required. Drupal calls it 'username'. MySQL calls it 'user'.
+    $parameters['user'] = $db_spec['username'];
+
+    // EMPTY password is not the same as NO password, and is valid.
+    if (isset($db_spec['password'])) {
+      $parameters['password'] = $db_spec['password'];
+    }
+
+    if (!empty($db_spec['port'])) {
+      $parameters['port'] = $db_spec['port'];
+    }
+
+    break;
 
   }
 

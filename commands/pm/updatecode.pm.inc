@@ -1,8 +1,13 @@
 <?php
 
 /**
- * Command callback. Displays update status info and allows to update installed
- * projects.
+ * @file
+ * pm-updatecode command implementation.
+ */
+
+/**
+ * Command callback. Displays update status info and allows to update installed projects.
+ *
  * Pass specific projects as arguments, otherwise we update all that have
  * candidate releases.
  *
@@ -15,8 +20,6 @@ function drush_pm_updatecode() {
     drush_set_option('strict', 0);
     return drush_invoke('pm-updatestatus');
   }
-  // We don't provide for other options here, so we supply an explicit path.
-  drush_include_engine('update_info', 'drupal', NULL, DRUSH_BASE_PATH . '/commands/pm/update_info');
 
   // Get specific requests.
   $requests = pm_parse_arguments(func_get_args(), FALSE);
@@ -37,23 +40,22 @@ function drush_pm_updatecode() {
   if (!is_array($values) || $values['error_status']) {
     return FALSE;
   }
-  $updateable = $values['object'];
-  drush_print($values['output']);
-  $tmpfile = drush_tempnam('pm-updatecode.');
-
   $last = pm_update_last_check();
   drush_print(dt('Update information last refreshed: ') . ($last  ? format_date($last) : dt('Never')));
+  drush_print($values['output']);
+
+  $update_info = $values['object'];
 
   // Prevent update of core if --no-core was specified.
-  if (isset($updateable['drupal']) && drush_get_option('no-core', FALSE)) {
-    unset($updateable['drupal']);
+  if (isset($update_info['drupal']) && drush_get_option('no-core', FALSE)) {
+    unset($update_info['drupal']);
     drush_print(dt('Skipping core update (--no-core specified).'));
   }
 
-  // If there are any locked projects that were not requested, then remove them.
-  foreach ($updateable as $name => $project) {
-    if ((isset($project['locked'])) && (!isset($requests[$name]))) {
-      unset($updateable[$name]);
+  // Remove locked and non-updateable projects.
+  foreach ($update_info as $name => $project) {
+    if ((isset($project['locked']) && !isset($requests[$name])) || (!isset($project['updateable']) || !$project['updateable'])) {
+      unset($update_info[$name]);
     }
   }
 
@@ -63,14 +65,16 @@ function drush_pm_updatecode() {
     return TRUE;
   }
 
+  $tmpfile = drush_tempnam('pm-updatecode.');
+
   $core_update_available = FALSE;
-  if (isset($updateable['drupal'])) {
-    $drupal_project = $updateable['drupal'];
-    unset($updateable['drupal']);
+  if (isset($update_info['drupal'])) {
+    $drupal_project = $update_info['drupal'];
+    unset($update_info['drupal']);
 
     // At present we need to update drupal core after non-core projects
     // are updated.
-    if (empty($updateable)) {
+    if (empty($update_info)) {
       return _pm_update_core($drupal_project, $tmpfile);
     }
     // If there are modules other than drupal core enabled, then update them
@@ -89,7 +93,7 @@ function drush_pm_updatecode() {
 
   // If there are no releases to update, then print a final
   // exit message.
-  if (empty($updateable)) {
+  if (empty($update_info)) {
     if (drush_get_option('security-only')) {
       return drush_log(dt('No security updates available.'), 'ok');
     }
@@ -99,7 +103,7 @@ function drush_pm_updatecode() {
   }
 
   // Offer to update to the identified releases.
-  if (!pm_update_packages($updateable, $tmpfile)) {
+  if (!pm_update_packages($update_info, $tmpfile)) {
     return FALSE;
   }
 
@@ -212,7 +216,7 @@ function _pm_update_core(&$project, $tmpfile) {
 }
 
 /**
- * Move some files from one location to another
+ * Move some files from one location to another.
  */
 function _pm_update_move_files($src_dir, $dest_dir, $skip_list, $remove_conflicts = TRUE) {
   $items_to_move = drush_scan_directory($src_dir, '/.*/', array_merge(array('.', '..'), $skip_list), 0, FALSE, 'filename', 0, TRUE);
@@ -366,6 +370,9 @@ function pm_update_complete($project, $version_control) {
   $version_control->post_update($project);
 }
 
+/**
+ * Rollback the update process.
+ */
 function drush_pm_updatecode_rollback() {
   $projects = array_reverse(drush_get_context('DRUSH_PM_UPDATED', array()));
   foreach($projects as $project) {

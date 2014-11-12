@@ -83,7 +83,6 @@ If no --destination is provided, then destination depends on the project type:
 function pm_drush_command() {
   $update = 'update';
   $update_options = array(
-    'security-only' => 'Only update modules that have security updates available.',
     'lock' => array(
       'description' => 'Add a persistent lock to remove the specified projects from consideration during updates.  Locks may be removed with the --unlock parameter, or overridden by specifically naming the project as a parameter to pm-update or pm-updatecode.  The lock does not affect pm-download.  See also the update_advanced project for similar and improved functionality.',
       'example-value' => 'foo,bar',
@@ -199,6 +198,11 @@ function pm_drush_command() {
   $items['pm-refresh'] = array(
     'description' => 'Refresh update status information.',
     'drupal dependencies' => array($update),
+    'engines' => array(
+      'update_info' => array(
+        'add-options-to-command' => FALSE,
+      ),
+    ),
     'aliases' => array('rf'),
   );
   $items['pm-updatestatus'] = array(
@@ -211,6 +215,9 @@ function pm_drush_command() {
       'pipe' => 'Return a list of the projects with any extensions enabled that need updating, one project per line.',
     ) + $update_options,
     'sub-options' => $update_suboptions,
+    'engines' => array(
+      'update_info',
+    ),
     'outputformat' => array(
       'default' => 'table',
       'pipe-format' => 'list',
@@ -245,6 +252,7 @@ function pm_drush_command() {
       'release_info' => array(
         'add-options-to-command' => FALSE,
       ),
+      'update_info',
     ),
   );
   // Merge all items from above.
@@ -626,7 +634,7 @@ function drush_get_projects(&$extensions = NULL) {
     // where a module and a theme are declared as part of a same project.
     // There's a special case, a project called "sites", this is the reason for
     // the second condition here.
-    if ((in_array(basename($path), $reserved)) && (!in_array($name, $reserved))) {
+    if ($path == '.' || (in_array(basename($path), $reserved) && !in_array($name, $reserved))) {
       drush_log(dt('Error while trying to find the common path for enabled extensions of project !project. Extensions are: !extensions.', array('!project' => $name, '!extensions' => implode(', ', $project['extensions']))), 'error');
     }
     else {
@@ -1273,9 +1281,6 @@ function drush_pm_releasenotes() {
  * Command callback. Refresh update status information.
  */
 function drush_pm_refresh() {
-  // We don't provide for other options here, so we supply an explicit path.
-  drush_include_engine('update_info', 'drupal', NULL, DRUSH_BASE_PATH . '/commands/pm/update_info');
-
   _pm_refresh();
 }
 
@@ -1469,6 +1474,11 @@ function pm_drush_engine_type_info() {
       'add-options-to-command' => TRUE,
     ),
     'update_info' => array(
+      'description' => 'Determine how to fetch update info.',
+      'add-options-to-command' => TRUE,
+      'options' => array(
+        'security-only' => 'Only update modules that have security updates available.',
+      ),
     ),
     'version_control' => array(
       'option' => 'version-control',
@@ -1526,6 +1536,15 @@ function pm_drush_engine_release_info() {
         ),
       ),
     ),
+  );
+}
+
+/**
+ * Implements hook_drush_engine_ENGINE_TYPE().
+ */
+function pm_drush_engine_update_info() {
+  return array(
+    'drupal' => array(),
   );
 }
 
@@ -1718,10 +1737,16 @@ function drush_pm_update_lock(&$projects, $projects_to_lock, $projects_to_unlock
   return $locked_result;
 }
 
+/**
+ * Returns the path to the extensions cache file.
+ */
 function _drush_pm_extension_cache_file() {
   return drush_get_context('DRUSH_PER_USER_CONFIGURATION') . "/drush-extension-cache.inc";
 }
 
+/**
+ * Load the extensions cache.
+ */
 function _drush_pm_get_extension_cache() {
   $extension_cache = array();
   $cache_file = _drush_pm_extension_cache_file();
@@ -1735,6 +1760,9 @@ function _drush_pm_get_extension_cache() {
   return $extension_cache;
 }
 
+/**
+ * Lookup an extension in the extensions cache.
+ */
 function drush_pm_lookup_extension_in_cache($extension) {
   $result = NULL;
   $extension_cache = _drush_pm_get_extension_cache();
@@ -1744,9 +1772,17 @@ function drush_pm_lookup_extension_in_cache($extension) {
   return $result;
 }
 
+/**
+ * Persists extensions cache.
+ *
+ * #TODO# not implemented.
+ */
 function drush_pm_put_extension_cache($extension_cache) {
 }
 
+/**
+ * Store extensions founds within a project in extensions cache.
+ */
 function drush_pm_cache_project_extensions($project, $found) {
   $extension_cache = _drush_pm_get_extension_cache();
   foreach($found as $extension) {
