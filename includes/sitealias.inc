@@ -428,36 +428,17 @@ function _drush_sitealias_load_alias($alias, $alias_path_context = NULL) {
   $all_site_aliases = drush_get_context('site-aliases');
   $result = array();
 
-  // Check to see if this is a relative alias ('@site/@peer')
-  $relative_alias_pos = strpos($alias, '/@');
-  if ($relative_alias_pos !== false) {
-    $primary_alias = substr($alias,0,$relative_alias_pos);
-    $relative_alias = substr($alias,$relative_alias_pos + 1);
-    $primary_record = drush_sitealias_get_record($primary_alias);
-    _drush_sitealias_find_and_load_alias(substr($relative_alias,1), $primary_record);
-    $result = drush_sitealias_get_record($relative_alias);
+  // Only aliases--those named entities that begin with '@'--can be loaded this way.
+  // We also skip any alias that has already been loaded.
+  if ((substr($alias,0,1) == '@') && !array_key_exists($alias,$all_site_aliases)) {
+    $aliasname = substr($alias,1);
+    $result = _drush_sitealias_find_and_load_alias($aliasname, $alias_path_context);
     if (!empty($result)) {
-      if (array_key_exists('inherited', $result)) {
-        $result = array_merge($primary_record, $result);
-      }
-      $result['#name'] = $relative_alias;
-      _drush_sitealias_add_inherited_values_to_record($result);
-      _drush_sitealias_cache_alias($alias, $result);
-    }
-  }
-  else {
-    // Only aliases--those named entities that begin with '@'--can be loaded this way.
-    // We also skip any alias that has already been loaded.
-    if ((substr($alias,0,1) == '@') && !array_key_exists($alias,$all_site_aliases)) {
-      $aliasname = substr($alias,1);
-      $result = _drush_sitealias_find_and_load_alias($aliasname, $alias_path_context);
-      if (!empty($result)) {
-        $alias_options = array('site-aliases' => array($aliasname => $result));
-        _drush_sitealias_add_inherited_values($alias_options['site-aliases']);
-        drush_set_config_special_contexts($alias_options);
-        if (array_key_exists('#file', $result)) {
-          drush_log(dt('Loaded alias !alias from file !file', array('!alias' => $alias, '!file' => $result['#file'])));
-        }
+      $alias_options = array('site-aliases' => array($aliasname => $result));
+      _drush_sitealias_add_inherited_values($alias_options['site-aliases']);
+      drush_set_config_special_contexts($alias_options);
+      if (array_key_exists('#file', $result)) {
+        drush_log(dt('Loaded alias !alias from file !file', array('!alias' => $alias, '!file' => $result['#file'])));
       }
     }
   }
@@ -1069,59 +1050,6 @@ function drush_sitealias_resolve_sitelist($alias_record) {
   return $result_list;
 }
 
-/**
- * Check to see if the uri is the same in the source and target
- * lists for all items in the array.  This is a strong requirement
- * in D6; in D7, it is still highly convenient for the uri to
- * be the same, because the site folder name == the uri, and if
- * the uris match, then it is easier to rsync between remote machines.
- *
- * @param $source
- *   Array of source alias records
- * @param $target
- *   Array of target alias records to compare against source list
- * @return
- *   TRUE iff the uris of the sources and targets are in alignment
- */
-function drush_sitealias_check_lists_alignment($source, $target) {
-  $is_aligned = TRUE;
-
-  $i = 0;
-  foreach ($source as $one_source) {
-    if ((!isset($target[$i])) || (!_drush_sitelist_check_site_records($one_source, $target[$i]))) {
-      $is_aligned = FALSE;
-      break;
-    }
-    ++$i;
-  }
-
-  return $is_aligned;
-}
-
-/**
- * If the source and target lists contain alias records to the same
- * sets of sites, but in different orders, this routine will re-order
- * the lists so that they are in alignment.
- *
- * TODO:  Review the advisability of this operation.
- */
-function drush_sitelist_align_lists(&$source, &$target, &$source_result, &$target_result) {
-  $source_result = array();
-  $target_result = array();
-
-  foreach ($source as $key => $one_source) {
-    $one_target = _drush_sitelist_find_in_list($one_source, $target);
-    if ($one_target !== FALSE) {
-      $source_result[] = $one_source;
-      $target_result[] = $one_target;
-      unset($source[$key]);
-    }
-  }
-
-  $source = $source_result;
-  $target = $target_result;
-}
-
 function _drush_sitelist_find_in_list($one_source, &$target) {
   $result = FALSE;
 
@@ -1647,7 +1575,7 @@ function _drush_sitealias_set_context_by_name($alias, $prefix = '') {
       // Create an alias '@self'
       _drush_sitealias_cache_alias('@self', $site_alias_settings);
       // change the selected site to match the new --root and --uri, if any were set
-      _drush_bootstrap_select_drupal_site();
+      _drush_preflight_root_uri();
     }
     return TRUE;
   }

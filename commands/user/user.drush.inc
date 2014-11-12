@@ -4,7 +4,8 @@ use Drush\User\UserList;
 use Drush\User\UserListException;
 
 /**
- * @file Drush User Management commands
+ * @file
+ * Drush User Management commands
  */
 
 function user_drush_help($section) {
@@ -156,6 +157,9 @@ function user_drush_command() {
     'arguments' => array(
       'name' => 'The name of the account to cancel',
     ),
+    // The `_user_cancel` method still references global $user.
+    // @todo remove once https://www.drupal.org/node/2163205 is in.
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_LOGIN,
     'required-arguments' => TRUE,
     'examples' => array(
       'drush user-cancel username' =>
@@ -184,7 +188,7 @@ function user_drush_command() {
   $items['user-login'] = array(
     'description' => 'Display a one time login link for the given user account (defaults to uid 1).',
     'aliases' => array('uli'),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
+    'bootstrap' => DRUSH_BOOTSTRAP_NONE,
     'handle-remote-commands' => TRUE,
     'arguments' => array(
       'user' => 'An optional uid, user name, or email address for the user to log in as. Default is to log in as uid 1. The uid/name/mail options take priority if specified.',
@@ -245,9 +249,7 @@ function drush_user_get_class() {
  */
 function drush_user_information($users) {
   $userlist = new UserList($users);
-  foreach ($userlist->accounts as $account) {
-    $info[$account->id()] = $account->info();
-  }
+  $info = $userlist->each('info');
   return $info;
 }
 
@@ -256,9 +258,7 @@ function drush_user_information($users) {
  */
 function drush_user_block($users = '') {
   $userlist = new UserList($users);
-  foreach ($userlist->accounts as $account) {
-    $account->block();
-  }
+  $userlist->each('block');
   drush_log(dt('Blocked user(s): !users', array('!users' => $userlist->names())), 'success');
 }
 
@@ -267,9 +267,7 @@ function drush_user_block($users = '') {
  */
 function drush_user_unblock($users = '') {
   $userlist = new UserList($users);
-  foreach ($userlist->accounts as $account) {
-    $account->unblock();
-  }
+  $userlist->each('unblock');
   drush_log(dt('Unblocked user(s): !users', array('!users' => $userlist->names())), 'success');
 }
 
@@ -280,9 +278,7 @@ function drush_user_add_role($role, $users = '') {
   // If role is not found, an exception gets thrown and handled by command invoke.
   $role_object = drush_role_get_class($role);
   $userlist = new UserList($users);
-  foreach ($userlist->accounts as $account) {
-    $account->addRole($role_object->rid);
-  }
+  $userlist->each('addRole', array($role_object->rid));
   drush_log(dt('Added role !role role to !users', array('!role' => $role, '!users' => $userlist->names())),'success');
 }
 
@@ -293,9 +289,7 @@ function drush_user_remove_role($role, $users = '') {
   // If role is not found, an exception gets thrown and handled by command invoke.
   $role_object = drush_role_get_class($role);
   $userlist = new UserList($users);
-  foreach ($userlist->accounts as $account) {
-    $account->removeRole($role_object->rid);
-  }
+  $userlist->each('removeRole', array($role_object->rid));
   drush_log(dt('Removed role !role role to !users', array('!role' => $role, '!users' => $userlist->names())),'success');
 }
 
@@ -316,10 +310,7 @@ function drush_user_create($name) {
   if (!drush_get_context('DRUSH_SIMULATE')) {
     if ($account = $userversion->create($new_user)) {
       $userlist = new UserList($users);
-      foreach ($userlist->accounts as $account) {
-        $info[$account->id()] = $account->info();
-      }
-      return $info;
+      return $userlist->each('info');
     }
     else {
       return drush_set_error("Could not create a new user account with the name " . $name . ".");
@@ -367,7 +358,7 @@ function drush_user_password($inputs) {
       $pass = drush_prompt(dt('Password'), NULL, TRUE, TRUE);
     }
     foreach ($userlist->accounts as $account) {
-      $account->password($pass);
+      $userlist->each('password', array($pass));
     }
     drush_log(dt('Changed password for !users', array('!users' => $userlist->names())), 'success');
   }
@@ -388,7 +379,8 @@ function drush_user_login($inputs = '', $path = NULL) {
       return drush_set_error('Unable to execute user login.');
     }
     else {
-      $links = $return['object'];
+      // Prior versions of Drupal returned a string so cast to an array if needed.
+      $links = is_string($return['object']) ? array($return['object']) : $return['object'];
     }
   }
   else {
@@ -414,9 +406,7 @@ function drush_user_login($inputs = '', $path = NULL) {
       // No user option or argument was passed, so we default to uid 1.
         $userlist = new UserList(1);
     }
-    foreach ($userlist->accounts as $account) {
-      $links[$account->id()] = $account->passResetUrl($path);
-    }
+    $links = $userlist->each('passResetUrl', array($path));
   }
   $port = drush_get_option('redirect-port', FALSE);
   // There is almost always only one link so pick the first one for display and browser.

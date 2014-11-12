@@ -1,6 +1,11 @@
 <?php
 
 /**
+ * @file
+ * Preflight, postflight and shutdown code.
+ */
+
+/**
  * Prepare Drush for preflight.
  *
  * Runs before drush_main().
@@ -141,23 +146,30 @@ function drush_preflight() {
   // Set up base environment for system-wide file locations.
   _drush_preflight_base_environment();
 
-  // Load a drushrc.php file in the drush.php's directory.
-  drush_load_config('drush');
+  // Setup global alias_paths[] in context system.
+  if (!drush_get_option('local')) {
+    _drush_preflight_alias_path();
+  }
 
-  // Load a drushrc.php file in the $ETC_PREFIX/etc/drush directory.
-  drush_load_config('system');
+  if (!drush_get_option('local')) {
+    // Load a drushrc.php file in the drush.php's directory.
+    drush_load_config('drush');
 
-  // Load a drushrc.php file at ~/.drushrc.php.
-  drush_load_config('user');
+    // Load a drushrc.php file in the $ETC_PREFIX/etc/drush directory.
+    drush_load_config('system');
 
-  // Load a drushrc.php file in the ~/.drush directory.
-  drush_load_config('home.drush');
+    // Load a drushrc.php file at ~/.drushrc.php.
+    drush_load_config('user');
+
+    // Load a drushrc.php file in the ~/.drush directory.
+    drush_load_config('home.drush');
+  }
 
   // Load a custom config specified with the --config option.
   drush_load_config('custom');
 
-  // Determine if --root and --uri have been defined.
-  _drush_bootstrap_select_drupal_site();
+  // Determine if --root and --uri have been defined and set constants accordingly.
+  _drush_preflight_root_uri();
 
   // Process the site alias that specifies which instance
   // of Drush (local or remote) this command will operate on.
@@ -208,7 +220,6 @@ function _drush_preflight_global_options() {
   drush_set_context('DRUSH_VERBOSE',     drush_get_option(array('verbose', 'debug'), FALSE));
   drush_set_context('DRUSH_DEBUG', drush_get_option('debug'));
   drush_set_context('DRUSH_SIMULATE',    drush_get_option('simulate', FALSE));
-  drush_set_context('DRUSH_BACKEND', drush_get_option('backend'));
 
   // Backend implies affirmative unless negative is explicitly specified
   drush_set_context('DRUSH_NEGATIVE',    drush_get_option('no', FALSE));
@@ -247,40 +258,48 @@ function _drush_preflight_base_environment() {
   if (!file_exists(DRUSH_BASE_PATH . '/README.md') && file_exists(drush_get_context('SHARE_PREFIX', '/usr') . '/share/doc/drush' . '/README.md')) {
     drush_set_context('DOC_PREFIX', drush_get_context('SHARE_PREFIX', '/usr') . '/share/doc/drush');
   }
-  $alias_path =& drush_get_context('ALIAS_PATH');
+
   $default_prefix_configuration = drush_is_windows() ? getenv('ALLUSERSPROFILE') . '/Drush' : '';
   $default_prefix_commandfile = drush_is_windows() ? getenv('ALLUSERSPROFILE') . '/Drush' : '/usr';
   $site_wide_configuration_dir = drush_get_context('ETC_PREFIX', $default_prefix_configuration) . '/etc/drush';
   $site_wide_commandfile_dir = drush_get_context('SHARE_PREFIX', $default_prefix_commandfile) . '/share/drush/commands';
-  $alias_path[] = $site_wide_configuration_dir;
   drush_set_context('DRUSH_SITE_WIDE_CONFIGURATION', $site_wide_configuration_dir);
   drush_set_context('DRUSH_SITE_WIDE_COMMANDFILES', $site_wide_commandfile_dir);
-  $alias_path[] = dirname(__FILE__) . '/..';
+
   $server_home = drush_server_home();
   if (isset($server_home)) {
-    $alias_path[] = $server_home . '/.drush';
     drush_set_context('DRUSH_PER_USER_CONFIGURATION', $server_home . '/.drush');
   }
 }
 
-/**
- * Determine which Drupal site will be selected.
- *
- * The Drupal site itself will be bootstrapped at a later
- * phase; at this time, we set context variables to
- * point to the drupal root, site URI and site configuration
- * path that will be used when needed.
- *
- * These early context variables are used to find
- * drush configuration and alias files stored with the
- * site to be bootstrapped.
- */
-function _drush_bootstrap_select_drupal_site() {
-  $drupal_root = drush_get_option('root');
-  if (!isset($drupal_root)) {
-    $drupal_root = drush_locate_root();
+function _drush_preflight_alias_path() {
+  $alias_path =& drush_get_context('ALIAS_PATH');
+  $default_prefix_configuration = drush_is_windows() ? getenv('ALLUSERSPROFILE') . '/Drush' : '';
+  $site_wide_configuration_dir = drush_get_context('ETC_PREFIX', $default_prefix_configuration) . '/etc/drush';
+  $alias_path[] = $site_wide_configuration_dir;
+
+  $alias_path[] = dirname(__FILE__) . '/..';
+
+  $server_home = drush_server_home();
+  if (isset($server_home)) {
+    $alias_path[] = $server_home . '/.drush';
   }
-  drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', $drupal_root);
+}
+
+/**
+ * If --root or --uri are provided, set contexts and create a @self site alias.
+ */
+function _drush_preflight_root_uri() {
+  $root = drush_get_option('root');
+  if (!isset($root)) {
+    $root = drush_locate_root();
+  }
+  if ($root) {
+    $root = realpath($root);
+  }
+  // @todo This context name should not mention Drupal.
+  // @todo Drupal code should use DRUSH_DRUPAL_ROOT instead of this constant.
+  drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', $root);
   $uri = drush_get_option('uri', '');
   drush_set_context('DRUSH_SELECTED_URI', $uri);
   drush_sitealias_create_self_alias();
@@ -300,16 +319,18 @@ function _drush_find_commandfiles_drush() {
     }
   }
 
-  // System commands, residing in $SHARE_PREFIX/share/drush/commands
-  $share_path = drush_get_context('DRUSH_SITE_WIDE_COMMANDFILES');
-  if (is_dir($share_path)) {
-    $searchpath[] = $share_path;
-  }
+  if (!drush_get_option('local')) {
+    // System commands, residing in $SHARE_PREFIX/share/drush/commands
+    $share_path = drush_get_context('DRUSH_SITE_WIDE_COMMANDFILES');
+    if (is_dir($share_path)) {
+      $searchpath[] = $share_path;
+    }
 
-  // User commands, residing in ~/.drush
-  $per_user_config_dir = drush_get_context('DRUSH_PER_USER_CONFIGURATION');
-  if (!empty($per_user_config_dir)) {
-    $searchpath[] = $per_user_config_dir;
+    // User commands, residing in ~/.drush
+    $per_user_config_dir = drush_get_context('DRUSH_PER_USER_CONFIGURATION');
+    if (!empty($per_user_config_dir)) {
+      $searchpath[] = $per_user_config_dir;
+    }
   }
 
   // @todo the zero parameter is a bit weird here. It's $phase.

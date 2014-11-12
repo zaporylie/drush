@@ -1,9 +1,7 @@
 DESCRIPTION
 -----------
 
-Drush is a command line shell and Unix scripting interface for Drupal.  If you are unfamiliar with shell scripting, reviewing the documentation for your shell (e.g. man bash) or reading an online tutorial (e.g. search for "bash tutorial") will help you get the most out of Drush.
-
-Drush core ships with lots of useful commands for interacting with code like modules/themes/profiles. Similarly, it runs update.php, executes sql queries and DB migrations, and misc utilities like run cron or clear cache.
+Drush is a command line shell and Unix scripting interface for Drupal. Drush core ships with lots of useful commands for interacting with code like modules/themes/profiles. Similarly, it runs update.php, executes sql queries and DB migrations, and misc utilities like run cron or clear cache. Drush can be extended by [3rd party commandfiles](https://www.drupal.org/project/project_module?f[2]=im_vid_3%3A4654).
 
 [![Latest Stable Version](https://poser.pugx.org/drush/drush/v/stable.png)](https://packagist.org/packages/drush/drush) [![Total Downloads](https://poser.pugx.org/drush/drush/downloads.png)](https://packagist.org/packages/drush/drush) [![Latest Unstable Version](https://poser.pugx.org/drush/drush/v/unstable.png)](https://packagist.org/packages/drush/drush) [![License](https://poser.pugx.org/drush/drush/license.png)](https://packagist.org/packages/drush/drush)
 
@@ -16,7 +14,7 @@ Drush Version | Branch  | PHP | Compatible Drupal versions | Code Status
 ------------- | ------  | --- | -------------------------- | -----------
 Drush 7       | [master](https://travis-ci.org/drush-ops/drush)  | 5.3.0+ | D6, D7, D8                 | <img src="https://travis-ci.org/drush-ops/drush.svg?branch=master">
 Drush 6       | [6.x](https://travis-ci.org/drush-ops/drush) | 5.3.0+ | D6, D7                     | <img src="https://travis-ci.org/drush-ops/drush.svg?branch=6.x">
-Drush 5       | [5.x](https://travis-ci.org/drush-ops/drush) | 5.2.0+ | D6, D7                     | <img src="https://travis-ci.org/drush-ops/drush.svg?branch=5.x">
+Drush 5       | [5.x](https://travis-ci.org/drush-ops/drush) | 5.2.0+ | D6, D7                     | Unsupported
 Drush 4       | 4.x | 5.2.0+ | D5, D6, D7                 | Unsupported
 Drush 3       | 3.x | 5.2.0+ | D5, D6                     | Unsupported
 
@@ -37,9 +35,7 @@ For even more documentation, use the 'topic' command:
 
     $ drush topic
 
-Installation instructions can be found below.  For a full list of Drush commands
-and documentation by version, visit http://www.drush.org.
-
+Installation instructions can be found below.
 
 SUPPORT
 -----------
@@ -54,12 +50,11 @@ pursuing one of the support options below.
 
 MISC
 -----------
-* [www.drush.org](http://www.drush.org)
+* [API Documentation](http://api.drush.org)
+* [Drush Commands](http://drushcommands.com)
 * Subscribe to https://github.com/drush-ops/drush/releases.atom to receive notification on new releases.
 * [A list of modules that include Drush integration](http://drupal.org/project/modules?filters=tid%3A4654)
-* For more information, please see the [Resources](http://drush.org/resources) and the [Drush FAQ](http://drupal.org/drush-faq). Run the `drush topic` command for even more help.
 * If you are using Debian or Ubuntu, you can alternatively use the Debian packages uploaded in your distribution. You may need to use the backports to get the latest version, if you are running a LTS or "stable" release.
-* For advice on using Drush with your ISP, see the <a href="http://drush.org/resources#hosting">hosting section of the Resources page</a> on <a href="http://drush.org">drush.org</a>.
 
 REQUIREMENTS
 -----------
@@ -68,11 +63,18 @@ REQUIREMENTS
 * Drush works best on a Unix-like OS (Linux, OS X)
 * Most Drush commands run on Windows.  See INSTALLING DRUSH ON WINDOWS, below.
 
-INSTALL/UPDATE - COMPOSER
+INSTALL/UPDATE - DRUSH FOR COMPOSER BUILT PROJECTS
+-----------------
+* If your project has a composer.json, add the following to the `require` section: `"drush/drush": "6.*"`
+* Run `composer install` for a new project or `composer update` for an existing one.
+* Optional: Copy examples/drush to project root and modify to taste. This is a handy launcher script.
+* To update, change the drush line above and run `composer update`.
+
+INSTALL/UPDATE - A GLOBAL DRUSH FOR ALL PROJECTS
 ------------------
 
 * [Install Composer globally](http://getcomposer.org/doc/00-intro.md#system-requirements) (if needed).
-* Make sure Composer's global bin directory is on the system PATH (recommended):
+* Add Composer's global bin directory to the system PATH (recommended):
 
         sed -i '1i export PATH="$HOME/.composer/vendor/bin:$PATH"' $HOME/.bashrc
         source $HOME/.bashrc
@@ -88,6 +90,19 @@ INSTALL/UPDATE - COMPOSER
 * To update to a newer version (what you get depends on your specification in ~/.composer/composer.json):
 
         composer global update
+        
+* To install for all users on the server:
+
+        curl -sS https://getcomposer.org/installer | php
+        mv composer.phar /usr/local/bin/composer
+        ln -s /usr/local/bin/composer /usr/bin/composer
+
+        git clone https://github.com/drush-ops/drush.git /usr/local/src/drush
+        cd /usr/local/src/drush
+        git checkout 7.0.0-alpha5  #or whatever version you want.
+        ln -s /usr/local/src/drush/drush /usr/bin/drush
+        composer install
+        drush --version
 
 * Alternate commands to install some other variant of Drush:
 
@@ -205,6 +220,10 @@ To use php 5.3.x, add this line to .bash_profile:
 If you want to use php 5.4.x, add this line instead:
 
     export PATH="/Applications/MAMP/Library/bin:/Applications/MAMP/bin/php5.4/bin:$PATH"
+    
+If you use MAMP 3 (php 5.5.14 by default) and want to use php 5.5.x , add this line instead:
+
+    export PATH="/Applications/MAMP/Library/bin:/Applications/MAMP/bin/php/php5.5.14/bin:$PATH"
 
 If you have MAMP v.1.84 or lower, this configuration will work for both versions
 of PHP:
@@ -226,14 +245,14 @@ proceed.
 ADDITIONAL CONFIGURATIONS FOR OTHER AMP STACKS:
 -----------------------------------------------
 
-Users of other Apache distributions such as XAMPP, or Acquia's Dev Desktop will
+Users of other Apache distributions such as XAMPP, or Acquia's Dev Desktop v1 will
 want to ensure that its php can be found by the command line by adding it to
 the PATH variable, using the method in 3.b above. Depending on the version and
 distribution of your AMP stack, PHP might reside at:
 
 Path                                       | Application
 -----                                      | ----
-/Applications/acquia-drupal/php/bin        | Acquia Dev Desktop (Mac)
+/Applications/acquia-drupal/php/bin        | Acquia Dev Desktop v1 (Mac). v2 has own Drush.
 /Applications/xampp/xamppfiles/bin         | XAMP (Mac)
 /opt/lampp/bin                             | XAMPP (Windows)
 
@@ -316,9 +335,7 @@ INSTALLING DRUSH ON WINDOWS:
 Windows support has improved, but is still lagging. For full functionality,
 consider using on Linux/Unix/OSX using Virtualbox or other virtual machine.
 
-There is a Windows msi installer for drush available at http://www.drush.org/drush_windows_installer.
-
-Please see that page for more information on running Drush on Windows.
+There is a [Windows msi installer](https://github.com/drush-ops/drush/releases/download/6.0.0/Drush-6.0-2013-08-28-Installer-v1.0.21.msi).
 
 Whenever the documentation or the help text refers to 'drush [option]
 <command>' or something similar, 'drush' may need to be replaced by

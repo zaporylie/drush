@@ -360,7 +360,7 @@ function _drush_invoke_hooks($command, $args) {
           drush_log(dt("Returned from hook !hook", array('!hook' => $func)), 'debug');
         }
         catch (Exception $e) {
-          drush_set_error('DRUSH_EXECUTION_EXCEPTION', $e->getMessage());
+          drush_set_error('DRUSH_EXECUTION_EXCEPTION', (string) $e);
         }
         // If there is an error, break out of the foreach
         // $variations and foreach $callback_list
@@ -471,7 +471,7 @@ function drush_handle_command_output($command, $structured_output) {
       if ($formatter === TRUE) {
         return drush_set_error(dt('No outputformat class defined for !format', array('!format' => $format)));
       }
-      if ((!empty($command['engines']['outputformat'])) && (!in_array($formatter->selected_engine, $command['engines']['outputformat']['usable']))) {
+      if ((!empty($command['engines']['outputformat'])) && (!in_array($formatter->engine, $command['engines']['outputformat']['usable']))) {
         return $formatter->format_error(dt("The command '!command' does not produce output in a structure usable by this output format.", array('!command' => $command['command'])));
       }
       // Add any user-specified options to the metadata passed to the formatter.
@@ -755,7 +755,7 @@ function drush_parse_args() {
       if (strlen($opt) > 2 && $opt{1} != "-") {
         // Each char becomes a key of its own.
         for ($j = 1; $j < strlen($opt); $j++) {
-          $options[substr($opt, $j, 1)] = true;
+          $options[substr($opt, $j, 1)] = TRUE;
         }
       }
       // Do we have a longopt (starting with '--')?
@@ -764,7 +764,7 @@ function drush_parse_args() {
           $options[substr($opt, 2, $pos - 2)] = substr($opt, $pos + 1);
         }
         else {
-          $options[substr($opt, 2)] = true;
+          $options[substr($opt, 2)] = TRUE;
         }
       }
       else {
@@ -777,7 +777,7 @@ function drush_parse_args() {
           $i++;
         }
         else {
-          $options[$opt] = true;
+          $options[$opt] = TRUE;
         }
       }
     }
@@ -970,8 +970,17 @@ function drush_process_bootstrap_to_first_arg(&$arguments) {
  *   Associative array of currently active command descriptors.
  *
  */
-function drush_get_commands() {
-  $commands = $available_commands = array();
+function drush_get_commands($reset = FALSE) {
+  static $commands = array();
+
+  if ($reset) {
+    $commands = array();
+    return;
+  }
+  elseif ($commands) {
+    return $commands;
+  }
+
   $list = drush_commandfile_list();
   foreach ($list as $commandfile => $path) {
     if (drush_command_hook($commandfile, 'drush_command')) {
@@ -1011,7 +1020,7 @@ function drush_get_commands() {
     }
   }
 
-  return drush_set_context('DRUSH_COMMANDS', $commands);
+  return $commands;
 }
 
 function drush_command_defaults($key, $commandfile, $path) {
@@ -1036,6 +1045,7 @@ function drush_command_defaults($key, $commandfile, $path) {
     'options' => array(),
     'sub-options' => array(),
     'allow-additional-options' => FALSE,
+    'global-options' => array(),
     'examples' => array(),
     'aliases' => array(),
     'core' => array(),
@@ -1112,6 +1122,9 @@ function _drush_command_translate($source) {
  * - arguments: an array of arguments that are understood by the command. for help texts.
  * - required-arguments: The minimum number of arguments that are required, or TRUE if all are required.
  * - options: an array of options that are understood by the command. for help texts.
+ * - global-options: a list of options from the set of Drush global options (@see:
+ *   drush_get_global_options()) that relate to this command.  The help for these
+ *   options will be included in the help output for this command.
  * - examples: an array of examples that are understood by the command. for help texts.
  * - scope: one of 'system', 'project', 'site'.
  * - bootstrap: drupal bootstrap level (depends on Drupal major version). -1=no_bootstrap.
@@ -1711,6 +1724,7 @@ function drush_enforce_requirement_core(&$command) {
  * core-execute and pass alias value along with rest of CLI arguments.
  */
 function drush_shell_alias_replace() {
+  $escape = TRUE;
   $args = drush_get_arguments();
   $argv = drush_get_context('argv');
   $first = current($args);
@@ -1751,17 +1765,22 @@ function drush_shell_alias_replace() {
         $unmatched_replacements = preg_replace('/[{}]/', '', $unmatched_replacements);
         return drush_set_error('DRUSH_SHELL_ALIAS_UNMATCHED_REPLACEMENTS', dt('The shell alias @alias-name uses replacements "@unmatched". You must use this command with a site alias (e.g. `drush @myalias @alias-name ...`) that defines all of these variables.', array('@alias-name' => $first, '@unmatched' => $unmatched_replacements)));
       }
-      // Respect quoting. See http://stackoverflow.com/questions/2202435/php-explode-the-string-but-treat-words-in-quotes-as-a-single-word
-      $alias_value = str_getcsv($alias_value, ' ');
+      if (substr($alias_value, 0, 1) == '!') {
+        $alias_value = ltrim($alias_value, '!');
+        $alias_value = array('core-execute', $alias_value);
+        $escape = FALSE;
+      }
+      else {
+        // Respect quoting. See http://stackoverflow.com/questions/2202435/php-ex
+        $alias_value = str_getcsv($alias_value, ' ');
+      }
     }
     drush_log(dt('Shell alias found: !key => !value', array('!key' => $first, '!value' => implode(' ', $alias_value))), 'debug');
-    $replacement = $alias_value;
-    if (substr($alias_value[0], 0, 1) == '!') {
-      $replacement[0] = ltrim($replacement[0], '!');
-      array_unshift($replacement, 'core-execute');
-    }
     $pos = array_search($first, $argv);
-    array_splice($argv, $pos, 1, $replacement);
+    array_splice($argv, $pos, 1, $alias_value);
+    if (!$escape) {
+      drush_set_option('escape', FALSE);
+    }
     drush_set_context('argv', $argv);
     drush_parse_args();
     _drush_preflight_global_options();

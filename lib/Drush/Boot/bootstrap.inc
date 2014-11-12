@@ -182,7 +182,8 @@ function drush_bootstrap($phase, $phase_max = FALSE) {
         drush_log(dt("Drush bootstrap phase : !function()", array('!function' => $current_phase)), 'bootstrap');
         $current_phase();
 
-        // Find any command files that are available during this bootstrap phase.
+        // Reset commandfile cache and find any new command files that are available during this bootstrap phase.
+        drush_get_commands(TRUE);
         _drush_find_commandfiles($phase_index, $phase_max);
       }
       drush_set_context('DRUSH_BOOTSTRAP_PHASE', $phase_index);
@@ -382,7 +383,11 @@ function drush_bootstrap_error($code, $message = null) {
 }
 
 function _drush_bootstrap_output_prepare() {
-  $backend = drush_get_context('DRUSH_BACKEND');
+  // Note that as soon as we set the DRUSH_BACKEND context, we change
+  // the behavior of drush_log().  It is therefore important that we
+  // should not set this context until immediately before we call ob_start
+  // (i.e., in this function).
+  $backend = drush_set_context('DRUSH_BACKEND', drush_get_option('backend'));
   $quiet = drush_get_context('DRUSH_QUIET');
 
   if ($backend) {
@@ -428,7 +433,7 @@ function _drush_bootstrap_drupal_root_validate() {
     return drush_bootstrap_error('DRUSH_INVALID_DRUPAL_ROOT', dt("The directory !drupal_root does not contain a valid Drupal installation", array('!drupal_root' => $drupal_root)));
   }
 
-  drush_bootstrap_value('drupal_root', $drupal_root);
+  drush_bootstrap_value('drupal_root', realpath($drupal_root));
   define('DRUSH_DRUPAL_SIGNATURE', $signature);
 
   return TRUE;
@@ -458,7 +463,7 @@ function _drush_bootstrap_drupal_root() {
   $major_version = drush_drupal_major_version();
 
   if ($major_version <= 5) {
-    drush_set_error('DRUSH_DRUPAL_VERSION_UNSUPPORTED', dt('Drush !drush_version does not support Drupal !major_version. See http://drupal.org/project/drush for more information.', array('!drush_version' => DRUSH_VERSION, '!major_version' => $major_version)));
+    drush_set_error('DRUSH_DRUPAL_VERSION_UNSUPPORTED', dt('Drush !drush_version does not support Drupal !major_version.', array('!drush_version' => DRUSH_VERSION, '!major_version' => $major_version)));
   }
   else {
     if ($major_version <= 7) {
@@ -678,12 +683,21 @@ function _drush_bootstrap_drupal_full() {
     restore_error_handler();
   }
 
-  // If needed, prod module_implements() to recognize our system_watchdog() implementation.
   drush_include_engine('drupal', 'environment');
-  $dogs = drush_module_implements('watchdog');
-  if (!in_array('system', $dogs)) {
-    // Note that this resets module_implements cache.
-    drush_module_implements('watchdog', FALSE, TRUE);
+
+  // If we're running on Drupal 8 or later, we provide a logger which will send
+  // output to drush_log(). This should catch every message logged through every
+  // channel.
+  if (drush_drupal_major_version() >= 8) {
+    \Drupal::getContainer()->get('logger.factory')->addLogger(new \Drush\Log\DrushLog);
+  }
+  else {
+    // If needed, prod module_implements() to recognize our system_watchdog() implementation.
+    $dogs = drush_module_implements('watchdog');
+    if (!in_array('system', $dogs)) {
+      // Note that this resets module_implements cache.
+      drush_module_implements('watchdog', FALSE, TRUE);
+    }
   }
 
   // Write correct install_profile to cache as needed. Used by _drush_find_commandfiles().
@@ -709,9 +723,23 @@ function _drush_bootstrap_drupal_full() {
  * username or user id.
  */
 function _drush_bootstrap_drupal_login() {
-  $drush_user = drush_set_context('DRUSH_USER', drush_get_option('user', 0));
-
-  drush_drupal_login($drush_user);
+  $uid_or_name = drush_set_context('DRUSH_USER', drush_get_option('user', 0));
+  $userversion = drush_user_get_class();
+  if (!$account = $userversion->load_by_uid($uid_or_name)) {
+    if (!$account = $userversion->load_by_name($uid_or_name)) {
+      if (is_numeric($uid_or_name)) {
+        $message = dt('Could not login with user ID !user.', array('!user' => $uid_or_name));
+        if ($uid_or_name === 0) {
+          $message .= ' ' . dt('This is typically caused by importing a MySQL database dump from a faulty tool which re-numbered the anonymous user ID in the users table. See !link for help recovering from this situation.', array('!link' => 'http://drupal.org/node/1029506'));
+        }
+      }
+      else {
+        $message = dt('Could not login with user account `!user\'.', array('!user' => $uid_or_name));
+      }
+      return drush_set_error('DRUPAL_USER_LOGIN_FAILED', $message);
+    }
+  }
+  $userversion->setCurrentUser($account);
   _drush_log_drupal_messages();
 }
 

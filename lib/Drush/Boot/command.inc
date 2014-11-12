@@ -59,12 +59,18 @@ function _drush_find_commandfiles($phase, $phase_max = FALSE) {
       // Nothing to do here anymore. Left for documentation.
       break;
     case DRUSH_BOOTSTRAP_DRUPAL_FULL:
-      // Add enabled module paths. Since we are bootstrapped,
+      // Add enabled module paths, excluding the install profile. Since we are bootstrapped,
       // we can use the Drupal API.
       $ignored_modules = drush_get_option_list('ignored-modules', array());
+      $cid = drush_cid_install_profile();
+      if ($cached = drush_cache_get($cid)) {
+        $ignored_modules[] = $cached->data;
+      }
       foreach (array_diff(drush_module_list(), $ignored_modules) as $module) {
         $filename = drupal_get_filename('module', $module);
-        $searchpath[] = dirname($filename);
+        if ($filename) {
+          $searchpath[] = dirname($filename);
+        }
       }
       break;
   }
@@ -98,6 +104,7 @@ function drush_enforce_requirement_drupal_dependencies(&$command) {
   // If there are no drupal dependencies, then do nothing
   if (!empty($command['drupal dependencies'])) {
     foreach ($command['drupal dependencies'] as $dependency) {
+      drush_include_engine('drupal', 'environment');
       if(!drush_module_exists($dependency)) {
         $command['bootstrap_errors']['DRUSH_COMMAND_DEPENDENCY_ERROR'] = dt('Command !command needs the following modules installed/enabled to run: !dependencies.', array('!command' => $command['command'], '!dependencies' => implode(', ', $command['drupal dependencies'])));
         return FALSE;
@@ -117,6 +124,7 @@ function drush_enforce_requirement_drupal_dependencies(&$command) {
 function drush_command_belongs_to_disabled_module() {
   if (drush_has_boostrapped(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
     _drush_find_commandfiles(DRUSH_BOOTSTRAP_DRUPAL_SITE, DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
+    drush_get_commands(TRUE);
     $commands = drush_get_commands();
     $arguments = drush_get_arguments();
     $command_name = array_shift($arguments);

@@ -35,7 +35,7 @@ function test_drush_command() {
     ),
     'examples' => array(
       'test-run' => 'List all available classes and groups.',
-      'sudo -u apache test-run --all' => 'Run all available tests. Avoid permission related failures by running as web server user.',
+      'sudo -u apache drush test-run --all' => 'Run all available tests. Avoid permission related failures by running as web server user.',
       'test-run BootstrapPageCacheTestCase' => 'Run one test class.',
       'test-run Bootstrap' => 'Run all classes in a XML-RPC group.',
       'test-run Bootstrap,Filter' => 'Run all tests from multiple groups/classes.',
@@ -108,7 +108,7 @@ function drush_test_run_validate($specs = NULL) {
  *   A comma delimited string of test classes or group names.
  */
 function drush_test_run($specs = NULL) {
-  if (drush_drupal_major_version() > 7) {
+  if (drush_drupal_major_version() >= 8) {
     // \Drupal::cache('simpletest')->delete();
   }
   else {

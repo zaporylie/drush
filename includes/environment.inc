@@ -303,7 +303,7 @@ function drush_conf_path($server_uri, $require_settings = TRUE) {
 
 /**
  * Exhaustive depth-first search to try and locate the Drupal root directory.
- * This makes it possible to run drush from a subdirectory of the drupal root.
+ * This makes it possible to run Drush from a subdirectory of the drupal root.
  *
  * @param
  *   Search start path. Defaults to current working directory.
@@ -438,10 +438,10 @@ function drush_verify_cli() {
  * Build a drush command suitable for use for drush to call itself
  * e.g. in backend_invoke.
  */
-function drush_build_drush_command($drush_path = NULL, $php = NULL, $os = NULL, $remote_command = FALSE) {
-  $environment_variables = array();
+function drush_build_drush_command($drush_path = NULL, $php = NULL, $os = NULL, $remote_command = FALSE, $environment_variables = array()) {
   $os = _drush_get_os($os);
   $additional_options = '';
+  $prefix = '';
   if (!isset($drush_path)) {
     if (!$remote_command) {
       $drush_path = DRUSH_COMMAND;
@@ -465,7 +465,7 @@ function drush_build_drush_command($drush_path = NULL, $php = NULL, $os = NULL, 
       $additional_options .= ' --php=' . drush_escapeshellarg($php, $os);
     }
     // We will also add in the php options from --php-options
-    $prefix = drush_escapeshellarg($php, $os);
+    $prefix .= drush_escapeshellarg($php, $os);
     $php_options = implode(' ', drush_get_context_options('php-options'));
     if (!empty($php_options)) {
       $prefix .= ' ' . $php_options;
@@ -476,16 +476,22 @@ function drush_build_drush_command($drush_path = NULL, $php = NULL, $os = NULL, 
     // Set environment variables to propogate config to redispatched calls.
     if (drush_has_bash($os)) {
       if ($php) {
-        $environment_variables[] = 'DRUSH_PHP=' . drush_escapeshellarg($php, $os);
+        $environment_variables['DRUSH_PHP'] = $php;
       }
       if ($php_options_alias = drush_get_option('php-options', NULL, 'alias')) {
-        $environment_variables[] = 'PHP_OPTIONS=' . drush_escapeshellarg($php_options_alias, $os);
+        $environment_variables['PHP_OPTIONS'] = $php_options_alias;
       }
       $columns = drush_get_context('DRUSH_COLUMNS');
       if (($columns) && ($columns != 80)) {
-        $environment_variables[] = 'COLUMNS=' . $columns;
+        $environment_variables['COLUMNS'] = $columns;
       }
-      $prefix = implode(' ', $environment_variables);
+    }
+  }
+
+  // Add environmental variables, if present
+  if (!empty($environment_variables)) {
+    foreach ($environment_variables as $key=>$value) {
+      $prefix .= ' ' . drush_escapeshellarg($key, $os) . '=' . drush_escapeshellarg($value, $os);
     }
   }
 
@@ -648,13 +654,18 @@ function drush_is_local_host($host) {
  */
 function drush_server_home() {
   // Cannot use $_SERVER superglobal since that's empty during UnitUnishTestCase
-  // getenv('HOME') isn't set on windows and generates a Notice.
+  // getenv('HOME') isn't set on Windows and generates a Notice.
   $home = getenv('HOME');
-  if (empty($home)) {
-    if (!empty($_SERVER['HOMEDRIVE']) && !empty($_SERVER['HOMEPATH'])) {
-      // home on windows
-      $home = $_SERVER['HOMEDRIVE'] . $_SERVER['HOMEPATH'];
-    }
+  if (!empty($home)) {
+    // home should never end with a trailing slash.
+    $home = rtrim($home, '/');
+  }
+  elseif (!empty($_SERVER['HOMEDRIVE']) && !empty($_SERVER['HOMEPATH'])) {
+    // home on windows
+    $home = $_SERVER['HOMEDRIVE'] . $_SERVER['HOMEPATH'];
+    // If HOMEPATH is a root directory the path can end with a slash. Make sure
+    // that doesn't happen.
+    $home = rtrim($home, '\\/');
   }
   return empty($home) ? NULL : $home;
 }

@@ -61,19 +61,21 @@ define('DRUSH_CACHE_LIFETIME_DEFAULT', 86400);
  *   TRUE if the file was found and included.
  */
 function drush_include($path, $name, $version = NULL, $extension = 'inc') {
+  $name = str_replace('-', '_', $name);
   $version = ($version) ? $version : drush_drupal_major_version();
-  $file = sprintf("%s/%s_%s.%s", $path, str_replace('-', '_', $name), $version, $extension);
+
+  $file = sprintf("%s/%s_%s.%s", $path, $name, $version, $extension);
   if (file_exists($file)) {
-    //drush_log(dt('Including version specific file : @file', array('@file' => $file)));
     include_once($file);
     return TRUE;
   }
-  $file = sprintf("%s/%s.%s", $path, str_replace('-', '_', $name), $extension);
+  $file = sprintf("%s/%s.%s", $path, $name, $extension);
   if (file_exists($file)) {
-    //drush_log(dt('Including non-version specific file : @file', array('@file' => $file)));
     include_once($file);
     return TRUE;
   }
+
+  return drush_set_error('DRUSH_INCLUDE_NO_PATH', dt('Unable to include file !name!version!extension or !name!extension from !path.', array('!name' => $name, '!version' => $version, '!extension' => $extension)));
 }
 
 /**
@@ -97,15 +99,15 @@ function drush_get_class($class_name, $constructor_args = array(), $variations =
   if (empty($variations)) {
     $variations[] = drush_drupal_major_version();
   }
-  for ($i=count($variations); $i > 0; $i--) {
+  for ($i=count($variations); $i >= 0; $i--) {
     $variant_class_name = $class_name . implode('', array_slice($variations, 0, $i));
     if (class_exists($variant_class_name)) {
       $reflectionClass = new ReflectionClass($variant_class_name);
       return $reflectionClass->newInstanceArgs($constructor_args);
     }
   }
-  // Something bad happenned. Exception?
-  // drush_set_error('DRUSH_GET_CLASS_ERROR', dt('Unable to load class - %s', $class_name));
+  // Something bad happenned. TODO Exception?
+  return drush_set_error('DRUSH_GET_CLASS_ERROR', dt('Unable to load class !class', array('!class' => $class_name)));
 }
 
 /**
@@ -228,6 +230,8 @@ function drush_flatten_array($a) {
  *   elements for each item are:
  *
  *     - short-form: The shortcut form for specifying the key on the commandline.
+ *     - propagate: backend invoke will use drush_get_option to propagate this
+ *       option, when set, to any other Drush command that is called.
  *     - context: The drush context where the value of this item is cached.  Used
  *       by backend invoke to propagate values set in code.
  *     - never-post: If TRUE, backend invoke will never POST this item's value
@@ -298,7 +302,7 @@ function drush_get_global_options($brief = FALSE) {
     $options['remote-os']           = array('hidden' => TRUE, 'description' => 'The operating system used on the remote host. Managed by site alias.');
     $options['site-list']           = array('hidden' => TRUE, 'description' => 'List of sites to run commands on. Managed by site alias.');
     $options['reserve-margin']      = array('hidden' => TRUE, 'description' => 'Remove columns from formatted opions. Managed by multi-site command handling.');
-    $options['strict']              = array('hidden' => TRUE, 'description' => 'Check requirements more strictly / remove backwards-compatibility features for unit tests.');
+    $options['strict']              = array('propagate' => TRUE, 'description' => 'Return an error on unrecognized options. --strict=0: Allow unrecognized options.  --strict=2: Also return an error on any "warning" log messages.  Optional.  Default is 1.');
     $options['command-specific']    = array('hidden' => TRUE, 'merge-associative' => TRUE, 'description' => 'Command-specific options.');
     $options['site-aliases']        = array('hidden' => TRUE, 'merge-associative' => TRUE, 'description' => 'List of site aliases.');
     $options['shell-aliases']       = array('hidden' => TRUE, 'merge' => TRUE, 'never-propagate' => TRUE, 'description' => 'List of shell aliases.');
@@ -308,6 +312,8 @@ function drush_get_global_options($brief = FALSE) {
     $options['db-url']              = array('hidden' => TRUE, 'description' => 'A Drupal 6 style database URL. Used by various commands.', 'example-value' => 'mysql://root:pass@127.0.0.1/db');
     $options['drush-coverage']      = array('hidden' => TRUE, 'never-post' => TRUE, 'propagate-cli-value' => TRUE, 'description' => 'File to save code coverage data into.');
     $options['redirect-port']       = array('hidden' => TRUE, 'never-propagate' => TRUE, 'description' => 'Used by the user-login command to specify the redirect port on the local machine; it therefore would not do to pass this to the remote machines.');
+    $options['cache-clear']         = array('propagate' => TRUE, 'description' => 'Allow cache-clear operations / skip all cache-clear options. Caller is responsible for guaranteeing that the cache does not need to be invalidated, or to call cache-clear later.', 'example-value' => '0', );
+    $options['local']               = array('propagate' => TRUE, 'description' => 'Don\'t look in global locations for commandfiles, config, and site aliases');
 
     $command = array(
       'options' => $options,
@@ -809,7 +815,8 @@ function _drush_download_file($url, $destination, $overwrite = TRUE) {
     drush_shell_exec("wget -q --timeout=30 -O %s %s", $destination_tmp, $url);
   }
   else {
-    drush_shell_exec("curl --fail -s -L --connect-timeout 30 -o %s %s", $destination_tmp, $url);
+    // Force TLS1+ as per https://github.com/drush-ops/drush/issues/894.
+    drush_shell_exec("curl --tlsv1 --fail -s -L --connect-timeout 30 -o %s %s", $destination_tmp, $url);
   }
   if (!drush_file_not_empty($destination_tmp) && $file = @file_get_contents($url)) {
     @file_put_contents($destination_tmp, $file);
@@ -1136,9 +1143,7 @@ function drush_preflight_command_dispatch() {
     $user_interactive = drush_get_option('interactive');
     drush_set_option('interactive', TRUE);
     $values = drush_do_command_redispatch(is_array($command) ? $command : $command_name, $args, $remote_host, $remote_user, $user_interactive);
-    // In 'interactive' mode, $values is the result code from drush_shell_proc_open.
-    // @todo: in _drush_backend_invoke, return array('error_status' => $ret) instead for uniformity.
-    if (!is_array($values) && ($values != 0)) {
+    if ($values['error_status'] > 0) {
       // Force an error result code.  Note that drush_shutdown() will still run.
       drush_set_context('DRUSH_EXECUTION_COMPLETED', TRUE);
       exit($values);
@@ -1168,6 +1173,8 @@ function drush_preflight_command_dispatch() {
     }
     $command_name = array_shift($args);
     $multi_options = drush_get_context('cli');
+    unset($multi_options['php']);
+    unset($multi_options['php-options']);
     $backend_options = array();
     if (drush_get_option('pipe') || drush_get_option('interactive')) {
       $backend_options['interactive'] = TRUE;
@@ -1243,83 +1250,6 @@ function _drush_should_remove_command_arg($arg, $removal_list) {
   }
   return FALSE;
 }
-
-/**
- * Used by functions that operate on lists of sites, moving
- * information from the source to the destination.  Currenlty
- * this includes 'drush rsync' and 'drush sql sync'.
- */
-function drush_do_multiple_command($command, $source_record, $destination_record, $allow_single_source = FALSE) {
-  $is_multiple_command = FALSE;
-
-  if ((($allow_single_source == TRUE) || array_key_exists('site-list', $source_record)) && array_key_exists('site-list', $destination_record)) {
-    $is_multiple_command = TRUE;
-    $source_path = array_key_exists('path-component', $source_record) ? $source_record['path-component'] : '';
-    $destination_path = array_key_exists('path-component', $destination_record) ? $destination_record['path-component'] : '';
-
-    $target_list = array_values(drush_sitealias_resolve_sitelist($destination_record));
-    if (array_key_exists('site-list', $source_record)) {
-      $source_list = array_values(drush_sitealias_resolve_sitelist($source_record));
-
-      if (drush_sitealias_check_lists_alignment($source_list, $target_list) === FALSE) {
-        if (array_key_exists('unordered-list', $source_record) || array_key_exists('unordered-list', $destination_record)) {
-          drush_sitelist_align_lists($source_list, $target_list, $aligned_source, $aligned_target);
-          $source_list = $aligned_source;
-          $target_list = $aligned_target;
-        }
-      }
-    }
-    else {
-      $source_list = array_fill(0, count($target_list), $source_record);
-    }
-
-    if (!drush_get_context('DRUSH_SIMULATE')) {
-      drush_print(dt('You are about to !command between all of the following targets:', array('!command' => $command)));
-      $i = 0;
-      foreach ($source_list as $one_source) {
-        $one_target = $target_list[$i];
-        ++$i;
-        drush_print(dt('  !source will overwrite !target', array('!source' => drush_sitealias_alias_record_to_spec($one_source) . $source_path, '!target' => drush_sitealias_alias_record_to_spec($one_target) . $destination_path)));
-      }
-
-      if (drush_confirm('Continue? ') === FALSE) {
-         return drush_user_abort();
-      }
-    }
-
-    $data = drush_redispatch_get_options();
-    $i = 0;
-    foreach ($source_list as $one_source) {
-      $one_target = $target_list[$i];
-      ++$i;
-
-      $source_spec = drush_sitealias_alias_record_to_spec($one_source);
-      $target_spec = drush_sitealias_alias_record_to_spec($one_target);
-
-      drush_log(dt('Begin do_multiple !command via backend invoke', array('!command' => $command)));
-      $values = drush_invoke_process('@self', $command, array($source_spec . $source_path, $target_spec . $destination_path), $data);
-      drush_log(dt('Backend invoke is complete'));
-    }
-  }
-
-  return $is_multiple_command;
-}
-
-/**
- * Run a command on the site specified by the provided command record.
- *
- * The standard function that provides this service is called
- * drush_invoke_process.  Please call the standard function.
- *
- * @param backend_options
- *   TRUE - integrate errors
- *   FALSE - do not integrate errors
- *   array - @see drush_backend_invoke_concurrent
- *
-function drush_do_site_command($site_record, $command, $args = array(), $command_options = array(), $backend_options = FALSE) {
-  return drush_invoke_process($site_record, $command, $args, $command_options, $backend_options);
-}
- */
 
 /**
  * Redispatch the specified command using the same
@@ -1424,6 +1354,16 @@ function drush_log($message, $type = 'notice', $error = null) {
   drush_backend_packet('log', $entry);
 
   return $callback($entry);
+}
+
+function drush_log_has_errors($types = array('warning', 'error', 'failed')) {
+  $log =& drush_get_context('DRUSH_LOG', array());
+  foreach ($log as $entry) {
+    if (in_array($entry['type'], $types)) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }
 
 /**
@@ -1712,6 +1652,9 @@ function drush_format_size($size, $langcode = NULL) {
  * @param message
  *   Optional. Error message to be logged. If no message is specified, hook_drush_help will be consulted,
  *   using a key of 'error:MY_ERROR_STRING'.
+ *
+ * @param $output_label
+ *   Optional. Label to prepend to the error message.
  *
  * @return
  *   Always returns FALSE, to allow you to return with false in the calling functions,
