@@ -614,7 +614,6 @@ function drush_pm_classify_extensions(&$extensions, &$modules, &$themes, $extens
  * extensions.
  */
 function drush_get_projects(&$extensions = NULL) {
-  $info_file_extension = drush_drupal_major_version() >= 8 ? '.info.yml' : '.info';
   if (!isset($extensions)) {
     $extensions = drush_get_extensions();
   }
@@ -624,10 +623,8 @@ function drush_get_projects(&$extensions = NULL) {
       'version'    => drush_drupal_version(),
       'type'       => 'core',
       'extensions' => array(),
-      '_info_file_ctime' => 0,
     )
   );
-  $info_file_extension = drush_drupal_major_version() >= 8 ? '.info.yml' : '.info';
   foreach ($extensions as $extension) {
     $extension_name = drush_extension_get_name($extension);
     $extension_path = drush_extension_get_path($extension);
@@ -657,11 +654,6 @@ function drush_get_projects(&$extensions = NULL) {
       $project = $extension->info['project'];
     }
 
-    // Obtain the creation time of the extension's .info.yml.
-    // This is needed by the 'drush' backend of update_status engine.
-    $info_file = $extension_path . '/' . $extension_name . $info_file_extension;
-    $ctime = filectime($info_file);
-
     // Create/update the project in $projects with the project data.
     if (!isset($projects[$project])) {
       $projects[$project] = array(
@@ -676,16 +668,12 @@ function drush_get_projects(&$extensions = NULL) {
         'status'     => $extension->status,
         'extensions' => array(),
         'datestamp'  => isset($extension->info['datestamp']) ? $extension->info['datestamp'] : NULL,
-        '_info_file_ctime' => $ctime,
       );
       if (isset($extension->info['project status url'])) {
         $projects[$project]['status url'] = $extension->info['project status url'];
       }
     }
     else {
-      // Pick the latest creation time.
-      $projects[$project]['_info_file_ctime'] = max($projects[$project]['_info_file_ctime'], $ctime);
-
       // If any of the extensions is enabled, consider the project is enabled.
       if ($extension->status != 0) {
         $projects[$project]['status'] = $extension->status;
@@ -1634,7 +1622,7 @@ function pm_drush_engine_type_info() {
       'description' => 'Determine how to fetch projects from update service.',
       'default' => 'wget',
       'options' => array(
-        'cache' => 'Cache release XML and tarballs or git clones. Git clones use git\'s --reference option.',
+        'cache' => 'Cache release XML and tarballs or git clones. Git clones use git\'s --reference option. Defaults to 1 for downloads, and 0 for git.',
       ),
     ),
     'release_info' => array(
@@ -1646,9 +1634,11 @@ function pm_drush_engine_type_info() {
       'default' => 'drush',
       'add-options-to-command' => TRUE,
       'options' => array(
+        'update-backend' => 'Backend to obtain available updates.',
         'check-disabled' => 'Check for updates of disabled modules and themes.',
         'security-only'  => 'Only update modules that have security updates available.',
       ),
+      'combine-help' => TRUE,
     ),
     'version_control' => array(
       'option' => 'version-control',
@@ -1659,7 +1649,11 @@ function pm_drush_engine_type_info() {
 }
 
 /**
- * Used by dl and updatecode commands to determine how to download/checkout new projects and acquire updates to projects.
+ * Implements hook_drush_engine_ENGINE_TYPE().
+ *
+ * Package handler engine is used by pm-download and
+ * pm-updatecode commands to determine how to download/checkout
+ * new projects and acquire updates to projects.
  */
 function pm_drush_engine_package_handler() {
   return array(
@@ -1687,7 +1681,10 @@ function pm_drush_engine_package_handler() {
 }
 
 /**
- * Used by dl and updatecode commands to determine how to download/checkout new projects and acquire updates to projects.
+ * Implements hook_drush_engine_ENGINE_TYPE().
+ *
+ * Release info engine is used by several pm commands to obtain
+ * releases info from Drupal's update service or external sources.
  */
 function pm_drush_engine_release_info() {
   return array(
@@ -1712,6 +1709,9 @@ function pm_drush_engine_release_info() {
 
 /**
  * Implements hook_drush_engine_ENGINE_TYPE().
+ *
+ * Update status engine is used to check available updates for
+ * the projects in a Drupal site.
  */
 function pm_drush_engine_update_status() {
   return array(
@@ -1728,6 +1728,8 @@ function pm_drush_engine_update_status() {
 }
 
 /**
+ * Implements hook_drush_engine_ENGINE_TYPE().
+ *
  * Integration with VCS in order to easily commit your changes to projects.
  */
 function pm_drush_engine_version_control() {

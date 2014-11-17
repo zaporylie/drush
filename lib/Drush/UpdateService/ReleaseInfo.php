@@ -16,6 +16,9 @@ namespace Drush\UpdateService;
 class ReleaseInfo {
   const DEFAULT_URL = 'https://updates.drupal.org/release-history';
 
+  // Cache release xml files for 24h by default.
+  const CACHE_LIFETIME = 86400;
+
   private $cache;
   private $engine_config;
 
@@ -30,7 +33,7 @@ class ReleaseInfo {
       $config = array();
     }
     $config += array(
-      'cache-duration' => drush_get_option('cache-duration-releasexml', 24*3600),
+      'cache-duration' => drush_get_option('cache-duration-releasexml', self::CACHE_LIFETIME),
     );
     $this->engine_config = $config;
     $this->cache = array();
@@ -126,7 +129,7 @@ class ReleaseInfo {
           return drush_set_error('DRUSH_PM_NO_DEV_RELEASE', dt('There is no development release for project !project.', array('!project' => $request['name'])));
         }
       }
-      if (empty($release)) {
+      if (empty($release) && isset($request['version'])) {
         $release = $project_release_info->getSpecificRelease($request['version']);
         if ($release === FALSE) {
           return drush_set_error('DRUSH_PM_COULD_NOT_FIND_VERSION', dt("Could not locate !project version !version.", array(
