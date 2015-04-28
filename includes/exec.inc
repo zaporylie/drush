@@ -1,5 +1,7 @@
 <?php
 
+use Symfony\Component\Process\Process;
+
 /**
  * @file
  *   Functions for executing system commands. (e.g. exec(), system(), ...).
@@ -17,6 +19,10 @@
  * (e.g. unlink() and other file system functions) so that can be suppressed
  * if the simulation mode is enabled.
  *
+ * DEPRECATED.  Instead, use a functon that handles escaping the command
+ * arguments and options.  Use only when none of the arguments or options
+ * contain file paths.
+ *
  * @param $exec
  *   The shell command to execute.  Parameters should already be escaped.
  * @return
@@ -33,7 +39,8 @@ function drush_op_system($exec) {
   }
 
   // Throw away output.  Use drush_shell_exec() to capture output.
-  system($exec, $result_code);
+  $process = new Process($exec, NULL, NULL, NULL, 0);
+  $result_code = $process->run();
 
   return $result_code;
 }
@@ -147,7 +154,9 @@ function _drush_shell_exec($args, $interactive = FALSE) {
       return ($result == 0) ? TRUE : FALSE;
     }
     else {
-      exec($command . ' 2>&1', $output, $result);
+      $process = new Process($command . ' 2>&1', NULL, NULL, NULL, 0);
+      $result = $process->run();
+      $output = explode("\n", trim($process->getOutput()));
       _drush_shell_exec_output_set($output);
 
       if (drush_get_context('DRUSH_DEBUG')) {
@@ -231,6 +240,7 @@ function drush_shell_proc_open($cmd) {
     drush_print("Calling proc_open($cmd);", 0, STDERR);
   }
   if (!drush_get_context('DRUSH_SIMULATE')) {
+    // TODO: Use 'new Process($cmd, NULL, NULL, NULL, 0)'
     $process = proc_open($cmd, array(0 => STDIN, 1 => STDOUT, 2 => STDERR), $pipes);
     $proc_status = proc_get_status($process);
     $exit_code = proc_close($process);
