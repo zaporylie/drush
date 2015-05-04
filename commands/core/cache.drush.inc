@@ -160,7 +160,7 @@ function drush_cache_command_get($cid = NULL, $bin = NULL) {
   $result = drush_op('_drush_cache_command_get', $cid, $bin);
 
   if (empty($result)) {
-    return drush_set_error('DRUSH_CACHE_OBJECT_NOT_FOUND', dt('The !cid object in the !bin cache bin was not found.', array('!cid' => $cid, '!bin' => $bin)));
+    return drush_set_error('DRUSH_CACHE_OBJECT_NOT_FOUND', dt('The !cid object in the !bin bin was not found.', array('!cid' => $cid, '!bin' => $bin ? $bin : _drush_cache_bin_default())));
   }
   return $result;
 }
@@ -247,7 +247,7 @@ function drush_cache_clear_drush() {
   drush_cache_clear_all(NULL, 'default'); // commandfiles, etc.
   drush_cache_clear_all(NULL, 'complete'); // completion
   // Release XML. We don't clear tarballs since those never change.
-  $matches = drush_scan_directory(drush_directory_cache('download'), "/^http---updates.drupal.org-release-history/", array('.', '..'));
+  $matches = drush_scan_directory(drush_directory_cache('download'), "/^https---updates.drupal.org-release-history/", array('.', '..'));
   array_map('unlink', array_keys($matches));
 }
 
@@ -258,7 +258,17 @@ function drush_cache_clear_drush() {
  * it also clears drush cache and drupal render cache.
  */
 function drush_cache_rebuild() {
+  if (!drush_get_option('cache-clear', TRUE)) {
+    drush_log(dt("Skipping cache-clear operation due to --cache-clear=0 option."), 'ok');
+    return TRUE;
+  }
   chdir(DRUPAL_ROOT);
+
+  // Clear the APC cache to ensure APC class loader is reset.
+  if (function_exists('apc_fetch')) {
+    apc_clear_cache('user');
+  }
+
   $autoloader = drush_drupal_load_autoloader(DRUPAL_ROOT);
   require_once DRUSH_DRUPAL_CORE . '/includes/utility.inc';
 
@@ -266,7 +276,13 @@ function drush_cache_rebuild() {
   // Manually resemble early bootstrap of DrupalKernel::boot().
   require_once DRUSH_DRUPAL_CORE . '/includes/bootstrap.inc';
   DrupalKernel::bootEnvironment();
-  Settings::initialize(DrupalKernel::findSitePath($request), $autoloader);
+  // Avoid 'Only variables should be passed by reference'
+  $root  = DRUPAL_ROOT;
+  $site_path = DrupalKernel::findSitePath($request);
+  Settings::initialize($root, $site_path, $autoloader);
+
+  // Use our error handler since _drupal_log_error() depends on an unavailable theme system (ugh).
+  set_error_handler('drush_error_handler');
 
   // drupal_rebuild() calls drupal_flush_all_caches() itself, so we don't do it manually.
   drupal_rebuild($autoloader, $request);
@@ -275,9 +291,5 @@ function drush_cache_rebuild() {
   // As this command replaces `drush cache-clear all` for Drupal 8 users, clear
   // the Drush cache as well, for consistency with that behavior.
   drush_cache_clear_drush();
-
-  // Clears the render cache.
-  drush_include_engine('drupal', 'cache');
-  drush_cache_clear_render();
 }
 

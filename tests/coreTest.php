@@ -110,21 +110,15 @@ drush_invoke("version", $arg);
 
     $this->drush('pm-download', array('devel'), $options);
     $this->drush('pm-enable', array('devel'), $options);
-    $this->drush('pm-download', array('zen'), $options);
+    $this->drush('pm-download', array('empty_theme'), $options);
 
     $this->drush('drupal-directory', array('devel'), $options);
     $output = $this->getOutput();
-    $this->assertEquals($root  . $sitewide . '/modules/devel', $output);
+    $this->assertEquals(realpath($root  . $sitewide . '/modules/devel'), $output);
 
-    if (UNISH_DRUPAL_MAJOR_VERSION >= 8) {
-      // Known failure. See https://github.com/drush-ops/drush/pull/382.
-      $this->markTestSkipped('dd needs updating for D8.');
-    }
-    else {
-      $this->drush('drupal-directory', array('zen'), $options);
-      $output = $this->getOutput();
-      $this->assertEquals($root  . $sitewide . '/themes/zen', $output);
-    }
+    $this->drush('drupal-directory', array('empty_theme'), $options);
+    $output = $this->getOutput();
+    $this->assertEquals(realpath($root  . $sitewide . '/themes/empty_theme'), $output);
   }
 
   function testCoreRequirements() {
@@ -133,7 +127,7 @@ drush_invoke("version", $arg);
       'root' => $root,
       'uri' => key($this->getSites()),
       'pipe' => NULL,
-      'ignore' => 'cron,http requests,update_core', // no network access when running in tests, so ignore these
+      'ignore' => 'cron,http requests,update,update_core,trusted_host_patterns', // no network access when running in tests, so ignore these
       'strict' => 0, // invoke from script: do not verify options
     );
     // Verify that there are no severity 2 items in the status report

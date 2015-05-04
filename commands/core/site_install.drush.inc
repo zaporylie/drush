@@ -4,8 +4,24 @@ function site_install_drush_command() {
   $items['site-install'] = array(
     'description' => 'Install Drupal along with modules/themes/configuration using the specified install profile.',
     'arguments' => array(
-      'profile' => 'the install profile you wish to run. defaults to \'default\' in D6, \'standard\' in D7+',
-      'key=value...' => 'any additional settings you wish to pass to the profile. Fully supported on D7+, partially supported on D6 (single step configure forms only). The key is in the form [form name].[parameter name] on D7 or just [parameter name] on D6.',
+      // In Drupal 7 installation profiles can be marked as exclusive by placing
+      // a
+      // @code
+      //   exclusive: true
+      // @endcode
+      // line in the profile's info file.
+      // See https://www.drupal.org/node/1022020 for more information.
+      //
+      // In Drupal 8 you can turn your installation profile into a distribution
+      // by providing a
+      // @code
+      //   distribution:
+      //     name: 'Distribution name'
+      // @endcode
+      // block in the profile's info YAML file.
+      // See https://www.drupal.org/node/2210443 for more information.
+      'profile' => 'The install profile you wish to run. Defaults to \'default\' in D6, \'standard\' in D7+, unless an install profile is marked as exclusive (or as a distribution in D8+ terminology) in which case that is used.',
+      'key=value...' => 'Any additional settings you wish to pass to the profile. Fully supported on D7+, partially supported on D6 (single step configure forms only). The key is in the form [form name].[parameter name] on D7 or just [parameter name] on D6.',
     ),
     'options' => array(
       'db-url' => array(
@@ -37,6 +53,7 @@ function site_install_drush_command() {
         'example-value' => 'directory_name',
       ),
       'writable' => 'Make CMI and other dirs writable by both web and CLI users. Suitable for non Prod environments.',
+      'keep-config' => 'Keep CMI directories untouched. This preserves existing configuration.'
     ),
     'examples' => array(
       'drush site-install expert --locale=uk' => '(Re)install using the expert install profile. Set default language to Ukrainian.',
@@ -63,6 +80,7 @@ function site_install_drush_help_alter(&$command) {
     }
     else {
       unset($command['options']['writable']);
+      unset($command['options']['keep-config']);
     }
   }
 }
@@ -108,7 +126,7 @@ function drush_core_pre_site_install($profile = NULL) {
   $sitesfile = "sites/sites.php";
   $default = realpath($alias_record['root'] . '/sites/default');
   $sitesfile_write = drush_drupal_major_version() >= 8 && $conf_path != $default && !file_exists($sitesfile);
-  
+
   if (!file_exists($settingsfile)) {
     $msg[] = dt('create a @settingsfile file', array('@settingsfile' => $settingsfile));
   }
@@ -212,9 +230,11 @@ function drush_core_pre_site_install($profile = NULL) {
       $directories['staging'] =  $files . '/' . $directories[2];
     }
 
-    foreach ($directories as $directory) {
-      if (file_exists($directory)) {
-        drush_delete_dir_contents($directory, TRUE);
+    if (drush_get_option('keep-config', FALSE) == FALSE) {
+      foreach ($directories as $directory) {
+        if (file_exists($directory)) {
+          drush_delete_dir_contents($directory, TRUE);
+        }
       }
     }
 

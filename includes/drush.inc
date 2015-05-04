@@ -6,19 +6,24 @@
  */
 
 /**
-* @name Error status definitions
-* @{
-* Error code definitions for interpreting the current error status.
-* @see drush_set_error(), drush_get_error(), drush_get_error_log(), drush_cmp_error()
-*/
+ * @name Error status definitions
+ * @{
+ * Error code definitions for interpreting the current error status.
+ * @see drush_set_error(), drush_get_error(), drush_get_error_log(), drush_cmp_error()
+ */
 
 /** The command completed successfully. */
 define('DRUSH_SUCCESS', 0);
 /** The command could not be completed because the framework has specified errors that have occured. */
 define('DRUSH_FRAMEWORK_ERROR', 1);
+/** The command was aborted because the user chose to cancel it at some prompt.
+This exit code is arbitrarily the same as EX_TEMPFAIL in sysexits.h, although
+note that shell error codes are distinct from C exit codes, so this alignment
+not meaningful. */
+define('DRUSH_EXITCODE_USER_ABORT', 75);
 /** The command that was executed resulted in an application error,
-  The most commom causes for this is invalid PHP or a broken SSH
-  pipe when using drush_backend_invoke in a distributed manner. */
+The most commom causes for this is invalid PHP or a broken SSH
+pipe when using drush_backend_invoke in a distributed manner. */
 define('DRUSH_APPLICATION_ERROR', 255);
 
 /**
@@ -99,11 +104,14 @@ function drush_get_class($class_name, $constructor_args = array(), $variations =
   if (empty($variations)) {
     $variations[] = drush_drupal_major_version();
   }
-  for ($i=count($variations); $i >= 0; $i--) {
-    $variant_class_name = $class_name . implode('', array_slice($variations, 0, $i));
-    if (class_exists($variant_class_name)) {
-      $reflectionClass = new ReflectionClass($variant_class_name);
-      return $reflectionClass->newInstanceArgs($constructor_args);
+  $class_names = is_array($class_name) ? $class_name : array($class_name);
+  foreach ($class_names as $class_name) {
+    for ($i=count($variations); $i >= 0; $i--) {
+      $variant_class_name = $class_name . implode('', array_slice($variations, 0, $i));
+      if (class_exists($variant_class_name)) {
+        $reflectionClass = new ReflectionClass($variant_class_name);
+        return $reflectionClass->newInstanceArgs($constructor_args);
+      }
     }
   }
   // Something bad happenned. TODO Exception?
@@ -275,7 +283,7 @@ function drush_get_global_options($brief = FALSE) {
     $options['quiet']               = array('short-form' => 'q', 'description' => 'Suppress non-error messages.');
     $options['include']             = array('short-form' => 'i', 'short-has-arg' => TRUE, 'context' => 'DRUSH_INCLUDE', 'never-post' => TRUE, 'propagate-cli-value' => TRUE, 'merge-pathlist' => TRUE, 'description' => "A list of additional directory paths to search for drush commands.", 'example-value' => '/path/dir');
     $options['exclude']             = array('propagate-cli-value' => TRUE, 'never-post' => TRUE, 'merge-pathlist' => TRUE, 'description' => "A list of files and directory paths to exclude from consideration when searching for drush commandfiles.", 'example-value' => '/path/dir');
-    $options['config']              = array('short-form' => 'c', 'short-has-arg' => TRUE, 'context' => 'DRUSH_CONFIG', 'local-context-only' => TRUE, 'merge-pathlist' => TRUE, 'description' => "Specify an additional config file to load. See example.drushrc.php.", 'example-value' => '/path/file');
+    $options['config']              = array('short-form' => 'c', 'short-has-arg' => TRUE, 'context' => 'DRUSH_CONFIG', 'never-post' => TRUE, 'propagate-cli-value' => TRUE, 'merge-pathlist' => TRUE, 'description' => "Specify an additional config file to load. See example.drushrc.php.", 'example-value' => '/path/file');
     $options['user']                = array('short-form' => 'u', 'short-has-arg' => TRUE, 'propagate-cli-value' => TRUE, 'description' => "Specify a Drupal user to login with. May be a name or a number.", 'example-value' => 'name_or_number');
     $options['backend']             = array('short-form' => 'b', 'never-propagate' => TRUE, 'description' => "Hide all output and return structured data.");
     $options['choice']              = array('description' => "Provide an answer to a multiple-choice prompt.", 'example-value' => 'number');
@@ -316,9 +324,9 @@ function drush_get_global_options($brief = FALSE) {
     $options['local']               = array('propagate' => TRUE, 'description' => 'Don\'t look in global locations for commandfiles, config, and site aliases');
 
     $command = array(
-      'options' => $options,
-      '#brief' => FALSE,
-    ) + drush_command_defaults('global-options', 'global_options', __FILE__);
+        'options' => $options,
+        '#brief' => FALSE,
+      ) + drush_command_defaults('global-options', 'global_options', __FILE__);
     drush_command_invoke_all_ref('drush_help_alter', $command);
 
     $options = $command['options'];
@@ -340,7 +348,7 @@ function drush_die($msg = NULL, $status = NULL) {
  * "shebang" script line.
  */
 function _drush_is_drush_shebang_line($line) {
-   return ((substr($line,0,2) == '#!') && (strstr($line, 'drush') !== FALSE));
+  return ((substr($line,0,2) == '#!') && (strstr($line, 'drush') !== FALSE));
 }
 
 /**
@@ -395,7 +403,7 @@ function drush_confirm($msg, $indent = 0) {
   $stdin = fopen("php://stdin","r");
 
   while ($line = fgets($stdin)) {
-  $line = trim($line);
+    $line = trim($line);
     if ($line == 'y') {
       return TRUE;
     }
@@ -496,7 +504,6 @@ function drush_choice($options, $prompt = 'Enter a number.', $label = '!value', 
   if (drush_get_context('DRUSH_AFFIRMATIVE')  && (count($options) == 1)) {
     return $selection_list[1];
   }
-  drush_print(dt('Cancelled'));
   return FALSE;
 }
 
@@ -656,40 +663,46 @@ function drush_prompt($prompt, $default = NULL, $required = TRUE, $password = FA
  * or @see drush_shell_exec() to execute a shell command and capture the
  * shell output.
  *
- * @param $function
+ * @param $callable
  *   The name of the function. Any additional arguments are passed along.
  * @return
  *   The return value of the function, or TRUE if simulation mode is enabled.
  *
  */
-function drush_op($function) {
+function drush_op($callable) {
   $args_printed = array();
   $args = func_get_args();
   array_shift($args); // Skip function name
   foreach ($args as $arg) {
     $args_printed[] = is_scalar($arg) ? $arg : (is_array($arg) ? 'Array' : 'Object');
   }
+  $callable_string = is_array($callable) ? implode('::', $callable) : $callable;
 
   // Special checking for drush_op('system')
-  if ($function == 'system') {
+  if ($callable == 'system') {
     drush_log(dt("Do not call drush_op('system'); use drush_op_system instead"), 'debug');
   }
 
   if (drush_get_context('DRUSH_VERBOSE') || drush_get_context('DRUSH_SIMULATE')) {
-     drush_log(sprintf("Calling %s(%s)", $function, implode(", ", $args_printed)), 'debug');
+    drush_log(sprintf("Calling %s(%s)", $callable_string, implode(", ", $args_printed)), 'debug');
   }
 
   if (drush_get_context('DRUSH_SIMULATE')) {
     return TRUE;
   }
 
-  return drush_call_user_func_array($function, $args);
+  return drush_call_user_func_array($callable, $args);
 }
 
 /**
  * Mimic cufa but still call function directly. See http://drupal.org/node/329012#comment-1260752
  */
 function drush_call_user_func_array($function, $args = array() ) {
+  if (is_array($function)) {
+    // $callable is a method so always use CUFA.
+    return call_user_func_array($function, $args);
+  }
+
   switch (count($args)) {
     case 0: return $function(); break;
     case 1: return $function($args[0]); break;
@@ -843,6 +856,19 @@ function _drush_download_file($url, $destination, $overwrite = TRUE) {
  *   The MIME content type of the file or FALSE.
  */
 function drush_mime_content_type($filename) {
+  $content_type = drush_attempt_mime_content_type($filename);
+  if ($content_type) {
+    drush_log(dt('Mime type for !file is !mt', array('!file' => $filename, '!mt' => $content_type)), 'notice');
+    return $content_type;
+  }
+  return drush_set_error('MIME_CONTENT_TYPE_UNKNOWN', dt('Unable to determine mime type for !file.', array('!file' => $filename)));
+}
+
+/**
+ * Works like drush_mime_content_type, but does not set an error
+ * if the type is unknown.
+ */
+function drush_attempt_mime_content_type($filename) {
   $content_type = FALSE;
   if (class_exists('finfo')) {
     $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -915,13 +941,7 @@ function drush_mime_content_type($filename) {
       }
     }
   }
-
-  if ($content_type) {
-    drush_log(dt('Mime type for !file is !mt', array('!file' => $filename, '!mt' => $content_type)), 'notice');
-    return $content_type;
-  }
-
-  return drush_set_error('MIME_CONTENT_TYPE_UNKNOWN', dt('Unable to determine mime type for !file.', array('!file' => $filename)));
+  return $content_type;
 }
 
 /**
@@ -931,7 +951,7 @@ function drush_mime_content_type($filename) {
  *   The file content type if it's a tarball. FALSE otherwise.
  */
 function drush_file_is_tarball($path) {
-  $content_type = drush_mime_content_type($path);
+  $content_type = drush_attempt_mime_content_type($path);
   $supported = array(
     'application/x-bzip2',
     'application/x-gzip',
@@ -1076,135 +1096,6 @@ function drush_tarball_extract($path, $destination = FALSE, $listing = FALSE, $t
  */
 
 /**
- * Handle any command preprocessing that may need to be done, including
- * potentially redispatching the command immediately (e.g. for remote
- * commands).
- *
- * @return
- *   TRUE if the command was handled remotely.
- */
-function drush_preflight_command_dispatch() {
-  $interactive = drush_get_option('interactive', FALSE);
-
-  // The command will be executed remotely if the --remote-host flag
-  // is set; note that if a site alias is provided on the command line,
-  // and the site alias references a remote server, then the --remote-host
-  // option will be set when the site alias is processed.
-  // @see drush_sitealias_check_arg
-  $remote_host = drush_get_option('remote-host');
-  // Get the command early so that we can allow commands to directly handle remote aliases if they wish
-  $command = drush_parse_command();
-  drush_command_default_options($command);
-
-  // If the command sets the 'strict-option-handling' flag, then we will remove
-  // any cli options that appear after the command name from the 'cli' context.
-  // The cli options that appear before the command name are stored in the
-  // 'DRUSH_GLOBAL_CLI_OPTIONS' context, so we will just overwrite the cli context
-  // with this, after doing the neccessary fixup from short-form to long-form options.
-  // After we do that, we put back any local drush options identified by $command['options'].
-  if (is_array($command) && !empty($command['strict-option-handling'])) {
-    $cli_options = drush_get_context('DRUSH_GLOBAL_CLI_OPTIONS', array());
-    // Now we are going to sort out any options that exist in $command['options'];
-    // we will remove these from DRUSH_COMMAND_ARGS and put them back into the
-    // cli options.
-    $cli_context = drush_get_context('cli');
-    $remove_from_command_args = array();
-    foreach ($command['options'] as $option => $info) {
-      if (array_key_exists($option, $cli_context)) {
-        $cli_options[$option] = $cli_context[$option];
-        $remove_from_command_args[$option] = $option;
-      }
-    }
-    if (!empty($remove_from_command_args)) {
-      $drush_command_args = array();
-      foreach (drush_get_context('DRUSH_COMMAND_ARGS') as $arg) {
-        if (!_drush_should_remove_command_arg($arg, $remove_from_command_args)) {
-          $drush_command_args[] = $arg;
-        }
-      }
-      drush_set_context('DRUSH_COMMAND_ARGS', $drush_command_args);
-    }
-    drush_expand_short_form_options($cli_options);
-    drush_set_context('cli', $cli_options);
-    _drush_preflight_global_options();
-  }
-  // If the command sets the 'handle-remote-commands' flag, then we will short-circuit
-  // remote command dispatching and site-list command dispatching, and always let
-  // the command handler run on the local machine.
-  if (is_array($command) && !empty($command['handle-remote-commands'])) {
-    return FALSE;
-  }
-  if (isset($remote_host)) {
-    $args = drush_get_arguments();
-    $command_name = array_shift($args);
-    $remote_user = drush_get_option('remote-user');
-
-    // Force interactive mode if there is a single remote target.  #interactive is added by drush_do_command_redispatch
-    $user_interactive = drush_get_option('interactive');
-    drush_set_option('interactive', TRUE);
-    $values = drush_do_command_redispatch(is_array($command) ? $command : $command_name, $args, $remote_host, $remote_user, $user_interactive);
-    if ($values['error_status'] > 0) {
-      // Force an error result code.  Note that drush_shutdown() will still run.
-      drush_set_context('DRUSH_EXECUTION_COMPLETED', TRUE);
-      exit($values);
-    }
-    return TRUE;
-  }
-  // If the --site-list flag is set, then we will execute the specified
-  // command once for every site listed in the site list.
-  $site_list = drush_get_option('site-list');
-  if (isset($site_list)) {
-    if (!is_array($site_list)) {
-      $site_list = explode(',', $site_list);
-    }
-    $site_record = array('site-list' => $site_list);
-    $args = drush_get_arguments();
-
-    if (!drush_get_context('DRUSH_SIMULATE') && !$interactive  && !drush_get_context('DRUSH_AFFIRMATIVE') && !drush_get_context('DRUSH_QUIET')) {
-      drush_print(dt("You are about to execute '!command' non-interactively (--yes forced) on all of the following targets:", array('!command' => implode(" ", $args))));
-      foreach ($site_list as $one_destination) {
-        drush_print(dt('  !target', array('!target' => $one_destination)));
-      }
-
-      if (drush_confirm('Continue? ') === FALSE) {
-        drush_user_abort();
-        return TRUE;
-      }
-    }
-    $command_name = array_shift($args);
-    $multi_options = drush_get_context('cli');
-    unset($multi_options['php']);
-    unset($multi_options['php-options']);
-    $backend_options = array();
-    if (drush_get_option('pipe') || drush_get_option('interactive')) {
-      $backend_options['interactive'] = TRUE;
-    }
-    if (drush_get_option('no-label', FALSE)) {
-      $backend_options['no-label'] = TRUE;
-    }
-    // If the user specified a format, try to look up the
-    // default list separator for the specified format.
-    // If the user did not specify a different label separator,
-    // then pass in the default as an option, so that the
-    // separator between the items in the list and the site
-    // name will be consistent.
-    $format = drush_get_option('format', FALSE);
-    if ($format && !array_key_exists('label-separator', $multi_options)) {
-      $formatter = drush_load_engine('outputformat', $format);
-      if ($formatter) {
-        $list_separator = $formatter->get_info('list-separator');
-        if ($list_separator) {
-          $multi_options['label-separator'] = $list_separator;
-        }
-      }
-    }
-    $values = drush_invoke_process($site_record, $command_name, $args, $multi_options, $backend_options);
-    return TRUE;
-  }
-  return FALSE;
-}
-
-/**
  * Determine whether or not an argument should be removed from the
  * DRUSH_COMMAND_ARGS context.  This method is used when a Drush
  * command has set the 'strict-option-handling' flag indicating
@@ -1243,8 +1134,8 @@ function drush_preflight_command_dispatch() {
 function _drush_should_remove_command_arg($arg, $removal_list) {
   foreach ($removal_list as $candidate) {
     if (($arg == "-$candidate") ||
-        ($arg == "--$candidate") ||
-        (substr($arg,0,strlen($candidate)+3) == "--$candidate=") ) {
+      ($arg == "--$candidate") ||
+      (substr($arg,0,strlen($candidate)+3) == "--$candidate=") ) {
       return TRUE;
     }
   }
@@ -1255,9 +1146,10 @@ function _drush_should_remove_command_arg($arg, $removal_list) {
  * Redispatch the specified command using the same
  * options that were passed to this invocation of drush.
  */
-function drush_do_command_redispatch($command, $args = array(), $remote_host = NULL, $remote_user = NULL, $drush_path = NULL, $user_interactive = FALSE) {
+function drush_do_command_redispatch($command, $args = array(), $remote_host = NULL, $remote_user = NULL, $drush_path = NULL, $user_interactive = FALSE, $aditional_options = array()) {
   $additional_global_options = array();
   $command_options = drush_redispatch_get_options();
+  $command_options = $aditional_options + $command_options;
   if (is_array($command)) {
     $command_name = $command['command'];
     // If we are executing a remote command that uses strict option handling,
@@ -1344,11 +1236,11 @@ function drush_log($message, $type = 'notice', $error = null) {
   $log =& drush_get_context('DRUSH_LOG', array());
   $callback = drush_get_context('DRUSH_LOG_CALLBACK', '_drush_print_log');
   $entry = array(
-     'type' => $type,
-     'message' => $message,
-     'timestamp' => microtime(TRUE),
-     'memory' => memory_get_usage(),
-   );
+    'type' => $type,
+    'message' => $message,
+    'timestamp' => microtime(TRUE),
+    'memory' => memory_get_usage(),
+  );
   $entry['error'] = $error;
   $log[] = $entry;
   drush_backend_packet('log', $entry);
@@ -1552,8 +1444,8 @@ function drush_print_timers() {
 }
 
 /**
-* Turn drupal_set_message errors into drush_log errors
-*/
+ * Turn drupal_set_message errors into drush_log errors
+ */
 function _drush_log_drupal_messages() {
   if (function_exists('drupal_get_messages')) {
 
@@ -1736,7 +1628,8 @@ function drush_clear_error() {
  */
 function drush_user_abort($msg = NULL) {
   drush_set_context('DRUSH_USER_ABORT', TRUE);
-  drush_log($msg ? $msg : dt('Aborting.'), 'cancel');
+  drush_set_context('DRUSH_EXIT_CODE', DRUSH_EXITCODE_USER_ABORT);
+  drush_log($msg ? $msg : dt('Cancelled.'), 'cancel');
   return FALSE;
 }
 

@@ -625,6 +625,9 @@ function drush_get_projects(&$extensions = NULL) {
       'extensions' => array(),
     )
   );
+  if (isset($extensions['system']->info['datestamp'])) {
+    $projects['drupal']['datestamp'] = $extensions['system']->info['datestamp'];
+  }
   foreach ($extensions as $extension) {
     $extension_name = drush_extension_get_name($extension);
     $extension_path = drush_extension_get_path($extension);
@@ -667,8 +670,10 @@ function drush_get_projects(&$extensions = NULL) {
         'version'    => $extension->info['version'],
         'status'     => $extension->status,
         'extensions' => array(),
-        'datestamp'  => isset($extension->info['datestamp']) ? $extension->info['datestamp'] : NULL,
       );
+      if (isset($extension->info['datestamp'])) {
+        $projects[$project]['datestamp'] = $extension->info['datestamp'];
+      }
       if (isset($extension->info['project status url'])) {
         $projects[$project]['status url'] = $extension->info['project status url'];
       }
@@ -848,7 +853,7 @@ function drush_pm_list() {
 
   foreach ($status_filter as $status) {
     if (!in_array($status, $all_status)) { //TODO: this kind of check can be implemented drush-wide
-      return drush_set_error('DRUSH_PM_INVALID_PROJECT_TYPE', dt('!status is not a valid project status.', array('!status' => $status)));
+      return drush_set_error('DRUSH_PM_INVALID_PROJECT_STATUS', dt('!status is not a valid project status.', array('!status' => $status)));
   }
   }
 
@@ -868,23 +873,23 @@ function drush_pm_list() {
       continue;
     }
 
-    // filter out core if --no-core specified
+    // Filter out core if --no-core specified.
     if (drush_get_option('no-core', FALSE)) {
-      if (($extension->info['package'] == 'Core') || ((array_key_exists('project', $extension->info)) && ($extension->info['project'] == 'drupal'))) {
+      if ((($major_version >= 8) && ($extension->origin == 'core')) || (($major_version <= 7) && (strpos($extension->info['package'], 'Core') === 0))) {
         unset($extension_info[$key]);
         continue;
       }
     }
 
-    // filter out non-core if --core specified
+    // Filter out non-core if --core specified.
     if (drush_get_option('core', FALSE)) {
-      if (($extension->info['package'] != 'Core') && ((!array_key_exists('project', $extension->info)) || ($extension->info['project'] != 'drupal'))) {
+      if ((($major_version >= 8) && ($extension->origin != 'core')) || (($major_version <= 7) && (strpos($extension->info['package'], 'Core') !== 0))) {
         unset($extension_info[$key]);
         continue;
       }
     }
 
-    // filter by package
+    // Filter by package.
     if (!empty($package_filter)) {
       if (!in_array(strtolower($extension->info['package']), $package_filter)) {
         unset($extension_info[$key]);
@@ -1378,16 +1383,17 @@ function pm_parse_arguments($args, $dashes_to_underscores = TRUE) {
  *   Array with major, patch and extra keys.
  */
 function _pm_parse_version_decompound($version) {
-  $pattern = '/^(\d+)(?:.(\d+))?(?:\.(x|\d+))?(?:-(.*))?$/';
+  $pattern = '/^(\d+)(?:.(\d+))?(?:\.(x|\d+))?(?:-([a-z0-9\.-]*))?(?:\+(\d+)-dev)?$/';
 
   $matches = array();
   preg_match($pattern, $version, $matches);
 
   $parts = array(
-    'major' => '',
-    'minor' => '',
-    'patch' => '',
-    'extra' => '',
+    'major'  => '',
+    'minor'  => '',
+    'patch'  => '',
+    'extra'  => '',
+    'offset' => '',
   );
   if (isset($matches[1])) {
     $parts['major'] = $matches[1];
@@ -1402,6 +1408,9 @@ function _pm_parse_version_decompound($version) {
     }
     if (!empty($matches[4])) {
       $parts['extra'] = $matches[4];
+    }
+    if (!empty($matches[5])) {
+      $parts['offset'] = $matches[5];
     }
   }
 
@@ -1436,6 +1445,9 @@ function _pm_parse_version_compound($parts) {
         $project_version = $project_version . '-' . $parts['extra'];
       }
     }
+    if ($parts['offset'] != '') {
+      $project_version = $project_version . '+' . $parts['offset'] . '-dev';
+    }
   }
 
   return $project_version;
@@ -1447,6 +1459,7 @@ function _pm_parse_version_compound($parts) {
  * It parses both core and contrib version strings.
  *
  * Core (semantic versioning):
+ *   - 8.0.0-beta3+252-dev
  *   - 8.0.0-beta2
  *   - 8.0.x-dev
  *   - 8.1.x
@@ -1457,10 +1470,13 @@ function _pm_parse_version_compound($parts) {
  *   - 7.x-dev
  *   - 7.x
  *   - 7.33
+ *   - 7.34+3-dev
  *   - 7
  *
  * Contrib:
+ *   - 7.x-1.0-beta1+30-dev
  *   - 7.x-1.0-beta1
+ *   - 7.x-1.0+30-dev
  *   - 7.x-1.0
  *   - 1.0-beta1
  *   - 1.0
@@ -1478,7 +1494,7 @@ function _pm_parse_version_compound($parts) {
  *
  * @return array
  *   Version string in parts.
- *   Example for a contrib version ()ex: 7.x-3.2-beta1:
+ *   Example for a contrib version (ex: 7.x-3.2-beta1):
  *     - version         : Fully qualified version string.
  *     - drupal_version  : Core compatibility version (ex: 7.x).
  *     - version_major   : Major version (ex: 3).
@@ -1509,12 +1525,13 @@ function pm_parse_version($version, $is_core = FALSE) {
     $project_version = _pm_parse_version_compound($core_parts);
     $version_parts = array(
       'version' => $project_version,
-      'drupal_version' => $core_parts['major'] . '.x',
+      'drupal_version'  => $core_parts['major'] . '.x',
       'project_version' => $project_version,
-      'version_major' => $core_parts['major'],
-      'version_minor' => $core_parts['minor'],
-      'version_patch' => ($core_parts['patch'] == 'x') ? '' : $core_parts['patch'],
-      'version_extra' => ($core_parts['patch'] == 'x') ? 'dev' : $core_parts['extra'],
+      'version_major'   => $core_parts['major'],
+      'version_minor'   => $core_parts['minor'],
+      'version_patch'   => ($core_parts['patch'] == 'x') ? '' : $core_parts['patch'],
+      'version_extra'   => ($core_parts['patch'] == 'x') ? 'dev' : $core_parts['extra'],
+      'version_offset'  => $core_parts['offset'],
     );
   }
   else {
@@ -1522,15 +1539,17 @@ function pm_parse_version($version, $is_core = FALSE) {
     // in $version['extra'] and we need to parse it.
     if (strpbrk($core_parts['extra'], '.-')) {
       $nocore_parts = _pm_parse_version_decompound($core_parts['extra']);
+      $nocore_parts['offset'] = $core_parts['offset'];
       $project_version = _pm_parse_version_compound($nocore_parts);
       $version_parts = array(
         'version' => $core_parts['major'] . '.x-' . $project_version,
-        'drupal_version' => $core_parts['major'] . '.x',
+        'drupal_version'  => $core_parts['major'] . '.x',
         'project_version' => $project_version,
-        'version_major' => $nocore_parts['major'],
-        'version_minor' => $core_parts['minor'],
-        'version_patch' => ($nocore_parts['patch'] == 'x') ? '' : $nocore_parts['patch'],
-        'version_extra' => ($nocore_parts['patch'] == 'x') ? 'dev' : $nocore_parts['extra'],
+        'version_major'   => $nocore_parts['major'],
+        'version_minor'   => $core_parts['minor'],
+        'version_patch'   => ($nocore_parts['patch'] == 'x') ? '' : $nocore_parts['patch'],
+        'version_extra'   => ($nocore_parts['patch'] == 'x') ? 'dev' : $nocore_parts['extra'],
+        'version_offset'  => $core_parts['offset'],
       );
     }
     // At this point we have half a version and must decide if this is a drupal major or a project.
@@ -1540,25 +1559,27 @@ function pm_parse_version($version, $is_core = FALSE) {
         $project_version = _pm_parse_version_compound($core_parts);
         $version = ($project_version) ? $drupal_version_default . '.x-' . $project_version : '';
         $version_parts = array(
-          'version' => $version,
-          'drupal_version' => $drupal_version_default . '.x',
+          'version'         => $version,
+          'drupal_version'  => $drupal_version_default . '.x',
           'project_version' => $project_version,
-          'version_major' => $core_parts['major'],
-          'version_minor' => $core_parts['minor'],
-          'version_patch' => ($core_parts['patch'] == 'x') ? '' : $core_parts['patch'],
-          'version_extra' => ($core_parts['patch'] == 'x') ? 'dev' : $core_parts['extra'],
+          'version_major'   => $core_parts['major'],
+          'version_minor'   => $core_parts['minor'],
+          'version_patch'   => ($core_parts['patch'] == 'x') ? '' : $core_parts['patch'],
+          'version_extra'   => ($core_parts['patch'] == 'x') ? 'dev' : $core_parts['extra'],
+          'version_offset'  => $core_parts['offset'],
         );
       }
       // Not working on a bootstrapped site, core_parts is core version.
       else {
         $version_parts = array(
           'version' => '',
-          'drupal_version' => $core_parts['major'] . '.x',
+          'drupal_version'  => $core_parts['major'] . '.x',
           'project_version' => '',
-          'version_major' => '',
-          'version_minor' => '',
-          'version_patch' => '',
-          'version_extra' => '',
+          'version_major'   => '',
+          'version_minor'   => '',
+          'version_patch'   => '',
+          'version_extra'   => '',
+          'version_offset'  => '',
         );
       }
     }
@@ -1659,6 +1680,9 @@ function pm_drush_engine_package_handler() {
   return array(
     'wget' => array(
       'description' => 'Download project packages using wget or curl.',
+      'options' => array(
+        'no-md5' => 'Skip md5 validation of downloads.',
+      ),
     ),
     'git_drupalorg' => array(
       'description' => 'Use git.drupal.org to checkout and update projects.',
@@ -1880,12 +1904,14 @@ function drush_pm_update_lock(&$projects, $projects_to_lock, $projects_to_unlock
 
   $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
   foreach ($projects as $name => $project) {
-    if ($name == 'drupal') {
-      continue;
-    }
     $message = NULL;
     if (isset($project['path'])) {
-      $lockfile = $drupal_root . '/' . $project['path'] . '/.drush-lock-update';
+      if ($name == 'drupal') {
+        $lockfile = $drupal_root . '/.drush-lock-update';
+      }
+      else {
+        $lockfile = $drupal_root . '/' . $project['path'] . '/.drush-lock-update';
+      }
 
       // Remove the lock file if the --unlock option was specified
       if (((in_array($name, $projects_to_unlock)) || (in_array('all', $projects_to_unlock))) && (file_exists($lockfile))) {
@@ -1994,7 +2020,7 @@ function drush_pm_extensions_in_project($project) {
   if (in_array($project['project_type'], array('core', 'profile'))) {
     $found = array('profile' => array(), 'theme' => array(), 'module' => array());
     // Find all of the .info files
-    foreach (drush_scan_directory($project['project_install_location'], $mask, $nomask) as $filename => $info) {
+    foreach (drush_scan_directory($project['full_project_path'], $mask, $nomask) as $filename => $info) {
       // Extract extension name from filename.
       $matches = array();
       preg_match($mask, $info->basename, $matches);
@@ -2015,7 +2041,7 @@ function drush_pm_extensions_in_project($project) {
     }
     // Special case: find profiles for drupal < 7.x (no .info)
     if ($project['drupal_version'][0] < 7) {
-      foreach (drush_find_profiles($project['project_install_location']) as $filename => $info) {
+      foreach (drush_find_profiles($project['full_project_path']) as $filename => $info) {
         $found['profile'][] = $info->name;
       }
     }
@@ -2037,7 +2063,7 @@ function drush_pm_extensions_in_project($project) {
   // Modules and themes can only contain other extensions of the same type.
   elseif (in_array($project['project_type'], array('module', 'theme'))) {
     $found = array();
-    foreach (drush_scan_directory($project['project_install_location'], $mask, $nomask) as $filename => $info) {
+    foreach (drush_scan_directory($project['full_project_path'], $mask, $nomask) as $filename => $info) {
       // Extract extension name from filename.
       $matches = array();
       preg_match($mask, $info->basename, $matches);
@@ -2118,11 +2144,13 @@ function drush_find_empty_directories($dir, $exclude = array()) {
  *   The project machine name (AKA shortname).
  * @param string $version
  *   The version string to inject into the .info file(s).
+ * @param int $datestamp
+ *   The datestamp of the last commit.
  *
  * @return boolean
  *   TRUE on success, FALSE on any failures appending data to .info files.
  */
-function drush_pm_inject_info_file_metadata($project_dir, $project_name, $version) {
+function drush_pm_inject_info_file_metadata($project_dir, $project_name, $version, $datestamp) {
   // `drush_drupal_major_version()` cannot be used here because this may be running
   // outside of a Drupal context.
   $yaml_format = substr($version, 0, 1) >= 8;
@@ -2134,7 +2162,7 @@ function drush_pm_inject_info_file_metadata($project_dir, $project_name, $versio
       $info = _drush_pm_generate_info_yaml_metadata($version, $project_name);
     }
     else {
-      $info = _drush_pm_generate_info_ini_metadata($version, $project_name);
+      $info = _drush_pm_generate_info_ini_metadata($version, $project_name, $datestamp);
     }
     foreach ($info_files as $info_file) {
       if (!drush_file_append_data($info_file->filename, $info)) {
@@ -2151,7 +2179,7 @@ function drush_pm_inject_info_file_metadata($project_dir, $project_name, $versio
  * Taken with some modifications from:
  * http://drupalcode.org/project/drupalorg.git/blob/refs/heads/6.x-3.x:/drupalorg_project/plugins/release_packager/DrupalorgProjectPackageRelease.class.php#l192
  */
-function _drush_pm_generate_info_ini_metadata($version, $project_name) {
+function _drush_pm_generate_info_ini_metadata($version, $project_name, $datestamp) {
   $matches = array();
   $extra = '';
   if (preg_match('/^((\d+)\.x)-.*/', $version, $matches) && $matches[2] >= 6) {
@@ -2160,13 +2188,12 @@ function _drush_pm_generate_info_ini_metadata($version, $project_name) {
   if (!drush_get_option('no-gitprojectinfo', FALSE)) {
     $extra = "\nproject = \"$project_name\"";
   }
-  $time = time();
-  $date = date('Y-m-d');
+  $date = date('Y-m-d', $datestamp);
   $info = <<<METADATA
 
 ; Information added by drush on {$date}
 version = "{$version}"{$extra}
-datestamp = "{$time}"
+datestamp = "{$datestamp}"
 METADATA;
   return $info;
 }

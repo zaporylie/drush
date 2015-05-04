@@ -8,11 +8,6 @@
  * @requires PHP CLI 5.3.0, or newer.
  */
 
-require dirname(__FILE__) . '/includes/preflight.inc';
-
-if (drush_preflight_prepare() === FALSE) {
-  exit(1);
-}
 exit(drush_main());
 
 /**
@@ -31,7 +26,11 @@ exit(drush_main());
  *   Whatever the given command returns.
  */
 function drush_main() {
-  $return = '';
+  // Load Drush core include files, and parse command line arguments.
+  require dirname(__FILE__) . '/includes/preflight.inc';
+  if (drush_preflight_prepare() === FALSE) {
+    return(1);
+  }
   // Start code coverage collection.
   if ($coverage_file = drush_get_option('drush-coverage', FALSE)) {
     drush_set_context('DRUSH_CODE_COVERAGE', $coverage_file);
@@ -39,20 +38,16 @@ function drush_main() {
     register_shutdown_function('drush_coverage_shutdown');
   }
 
-  /* Set up bootstrap object, so that
-   * - 'early' files can bootstrap when needed.
-   * - bootstrap constants are available.
-   */
-  $bootstrap_class = drush_get_option('bootstrap_class', 'Drush\Boot\DrupalBoot');
-  $bootstrap = new $bootstrap_class;
-  drush_set_context('DRUSH_BOOTSTRAP_OBJECT', $bootstrap);
-  $bootstrap->preflight();
+  // Load the global Drush configuration files, and global Drush commands.
+  // Find the selected site based on --root, --uri or cwd
+  // Preflight the selected site, and load any configuration and commandfiles associated with it.
+  // Select and return the bootstrap class.
+  $bootstrap = drush_preflight();
 
-  // Process initial global options such as --debug.
-  _drush_preflight_global_options();
+  // Reset our bootstrap phase to the beginning
+  drush_set_context('DRUSH_BOOTSTRAP_PHASE', DRUSH_BOOTSTRAP_NONE);
 
   $return = '';
-  drush_preflight();
   if (!drush_get_error()) {
     if ($file = drush_get_option('early', FALSE)) {
       require_once $file;
@@ -72,10 +67,16 @@ function drush_main() {
       // perhaps handling immediately.
       $command_handled = drush_preflight_command_dispatch();
       if (!$command_handled) {
-        $bootstrap = drush_get_context('DRUSH_BOOTSTRAP_OBJECT');
         $return = $bootstrap->bootstrap_and_dispatch();
       }
     }
+  }
+  // TODO: Get rid of global variable access here, and just trust
+  // the bootstrap object returned from drush_preflight().  This will
+  // require some adjustments to Drush bootstrapping.
+  // See: https://github.com/drush-ops/drush/pull/1303
+  if ($bootstrap = drush_get_bootstrap_object()) {
+    $bootstrap->terminate();
   }
   drush_postflight();
 

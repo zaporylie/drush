@@ -89,8 +89,14 @@ class StatusInfoDrush implements StatusInfoInterface {
       }
       drush_log(dt('Checking available update data for !project.', array('!project' => $project['label'])), 'ok');
       $request = pm_parse_request($project_name);
-      $available[$project_name] = $release_info->get($request);
+      $project_release_info = $release_info->get($request);
+      if ($project_release_info) {
+        $available[$project_name] = $project_release_info;
+      }
     }
+
+    // Clear any error set by a failed project. This avoid rollbacks.
+    drush_clear_error();
 
     return $available;
   }
@@ -112,16 +118,18 @@ class StatusInfoDrush implements StatusInfoInterface {
       // Prepare update info.
       $project = $projects[$project_name];
       $is_core = ($project['type'] == 'core');
-      $version_parts = pm_parse_version($project['version'], $is_core);
-      $install_type = ($version_parts['version_extra'] == 'dev') ? 'dev' : 'official';
+      $version = pm_parse_version($project['version'], $is_core);
+      // If project version ends with 'dev', this is a dev snapshot.
+      $install_type = (substr($project['version'], -3, 3) == 'dev') ? 'dev' : 'official';
       $project_update_info = array(
         'name'             => $project_name,
         'label'            => $project['label'],
         'path'             => isset($project['path']) ? $project['path'] : '',
         'install_type'     => $install_type,
         'existing_version' => $project['version'],
-        'existing_major'   => $version_parts['version_major'],
+        'existing_major'   => $version['version_major'],
         'status'           => $project_status,
+        'datestamp'        => empty($project['datestamp']) ? NULL : $project['datestamp'],
       );
 
       // If we don't have a project status yet, it means this is
@@ -131,7 +139,11 @@ class StatusInfoDrush implements StatusInfoInterface {
         $this->calculateProjectUpdateStatus($project_release_info, $project_update_info);
       }
 
-      $update_info[$project_name] = $project_release_info->getInfo() + $project_update_info;
+      // We want to ship all release info data including all releases,
+      // not just the ones selected by calculateProjectUpdateStatus().
+      // We use it to allow the user to update to a specific version.
+      unset($project_update_info['releases']);
+      $update_info[$project_name] = $project_update_info + $project_release_info->getInfo();
     }
 
     return $update_info;
@@ -265,6 +277,12 @@ class StatusInfoDrush implements StatusInfoInterface {
         continue;
       }
 
+      // See if this is a higher major version than our target and discard it.
+      // Note: at this point Drupal record it as an "Also available" release.
+      if (isset($release['version_major']) && $release['version_major'] > $target_major) {
+        continue;
+      }
+
       // Look for the 'latest version' if we haven't found it yet. Latest is
       // defined as the most recent version for the target major version.
       if (!isset($project_data['latest_version'])
@@ -321,7 +339,7 @@ class StatusInfoDrush implements StatusInfoInterface {
 
       // See if this release is a security update.
       if (isset($release['terms']['Release type'])
-        && in_array('Security update', $release['terms']['Release type'])) {
+          && in_array('Security update', $release['terms']['Release type'])) {
         $project_data['security updates'][] = $release;
       }
     }

@@ -190,7 +190,7 @@ function drush_site_path($path = NULL) {
     // Move up dir by dir and check each.
     // Stop if we get to a Drupal root.   We don't care
     // if it is DRUSH_SELECTED_DRUPAL_ROOT or some other root.
-    while ($path = _drush_shift_path_up($path) && !drush_valid_drupal_root($path)) {
+    while ($path = _drush_shift_path_up($path) && !drush_valid_root($path)) {
       if (file_exists($path . '/settings.php')) {
         $site_path = $path;
         break;
@@ -230,9 +230,11 @@ function drush_site_path($path = NULL) {
  * @return $dir
  *   The directory associated with that hostname or FALSE if not found.
  */
-function drush_site_dir_lookup_from_hostname($hostname) {
-  $site_root = drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT');
-  if (file_exists($site_root . '/sites/sites.php')) {
+function drush_site_dir_lookup_from_hostname($hostname, $site_root = NULL) {
+  if (!isset($site_root)) {
+    $site_root = drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT');
+  }
+  if (!empty($site_root) && file_exists($site_root . '/sites/sites.php')) {
     $sites = array();
     // This will overwrite $sites with the desired mappings.
     include($site_root . '/sites/sites.php');
@@ -320,7 +322,7 @@ function drush_locate_root($start_path = NULL) {
       $path = realpath($path);
     }
     // Check the start path.
-    if (drush_valid_drupal_root($path)) {
+    if (drush_valid_root($path)) {
       $drupal_root = $path;
       break;
     }
@@ -330,7 +332,7 @@ function drush_locate_root($start_path = NULL) {
         if ($follow_symlinks && is_link($path)) {
           $path = realpath($path);
         }
-        if (drush_valid_drupal_root($path)) {
+        if (drush_valid_root($path)) {
           $drupal_root = $path;
           break 2;
         }
@@ -351,22 +353,9 @@ function drush_locate_root($start_path = NULL) {
  *   The relative path to common.inc (varies by Drupal version), or FALSE if not
  *   a Drupal root.
  */
-function drush_valid_drupal_root($path) {
-  if (!empty($path) && is_dir($path) && file_exists($path . '/index.php')) {
-    // Drupal 8 root. Additional check for the presence of core/composer.json to
-    // grant it is not a Drupal 7 site with a base folder named "core".
-    $candidate = 'core/includes/common.inc';
-    if (file_exists($path . '/' . $candidate) && file_exists($path . '/core/misc/drupal.js') && file_exists($path . '/composer.json')) {
-      return $candidate;
-    }
-    // Drupal 7 root. Additional check for the absence of core/composer.json to
-    // grant $path is not core/ of a Drupal 8 root.
-    $candidate = 'includes/common.inc';
-    if (file_exists($path . '/' . $candidate) && file_exists($path . '/misc/drupal.js') && ((basename($path) != 'core') || !file_exists($path . '/../composer.json'))) {
-      return $candidate;
-    }
-  }
-  return FALSE;
+function drush_valid_root($path) {
+  $bootstrap_class = drush_bootstrap_class_for_root($path);
+  return $bootstrap_class != NULL;
 }
 
 /**
@@ -375,7 +364,7 @@ function drush_valid_drupal_root($path) {
 function drush_valid_db_credentials() {
   try {
     $sql = drush_sql_get_class();
-    if (!$sqlVersion = drush_get_class('Drush\Sql\Sql', array(), array(drush_drupal_major_version()))) {
+    if (!$sqlVersion = drush_sql_get_version()) {
       return FALSE;
     }
     if (!$sqlVersion->valid_credentials($sql->db_spec())) {
@@ -490,6 +479,7 @@ function drush_build_drush_command($drush_path = NULL, $php = NULL, $os = NULL, 
 
   // Add environmental variables, if present
   if (!empty($environment_variables)) {
+    $prefix .= ' env';
     foreach ($environment_variables as $key=>$value) {
       $prefix .= ' ' . drush_escapeshellarg($key, $os) . '=' . drush_escapeshellarg($value, $os);
     }
@@ -874,5 +864,20 @@ function drush_get_drupal_core_compatibility() {
   }
   elseif (defined('Drupal::CORE_COMPATIBILITY')) {
     return Drupal::CORE_COMPATIBILITY;
+  }
+}
+
+/**
+ * Set Env. Variables for given site-alias.
+ */
+function drush_set_environment_vars(array $site_record) {
+  if (!empty($site_record)) {
+    $os = drush_os($site_record);
+    if (isset($site_record['#env-vars'])) {
+      foreach ($site_record['#env-vars'] as $var => $value) {
+        $env_var = drush_escapeshellarg($var, $os, TRUE) . '=' . drush_escapeshellarg($value, $os, TRUE);
+        putenv($env_var);
+      }
+    }
   }
 }

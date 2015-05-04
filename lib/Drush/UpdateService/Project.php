@@ -152,8 +152,6 @@ class Project {
 
     $recommended_major = empty($project_info['recommended_major']) ? '' : $project_info['recommended_major'];
     $supported_majors = empty($project_info['supported_majors']) ? array() : array_flip(explode(',', $project_info['supported_majors']));
-    $recommended_version = NULL;
-    $latest_version = NULL;
 
     $items = array(
       'name', 'date', 'status', 'type',
@@ -244,7 +242,9 @@ class Project {
     }
 
     $project_info['releases'] = $releases;
-    $project_info['recommended'] = $recommended_version;
+    if (isset($recommended_version)) {
+      $project_info['recommended'] = $recommended_version;
+    }
 
     return $project_info;
   }
@@ -380,7 +380,7 @@ class Project {
    */
   public function getRecommendedOrSupportedRelease() {
     $majors = array();
-    if (!empty($this->parsed['recommended_major'])) {
+    if (!empty($this->parsed['recommended_major']) || $this->parsed['recommended_major'] == 0) {
       $majors[] = $this->parsed['recommended_major'];
     }
     $supported = explode(',', $this->parsed['supported_majors']);
@@ -389,7 +389,6 @@ class Project {
         $majors[] = $v;
       }
     }
-
     $releases = array();
     foreach ($majors as $major) {
       $releases = $this->searchReleases('version_major', $major);
