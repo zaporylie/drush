@@ -9,7 +9,7 @@ branches:
     - 5.x-fulltest
 language: php
 php:
-  - 5.4
+  - 5.5
 env:
   global:
     - UNISH_NO_TIMEOUTS=y
