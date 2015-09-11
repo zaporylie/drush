@@ -76,6 +76,8 @@ function drush_shell_cd_and_exec($effective_wd, $cmd) {
  * Output is stored and can be retrieved using drush_shell_exec_output().
  * If in simulation mode, no action is taken.
  *
+ * Use drush_run() instead where possible.
+ *
  * @param $cmd
  *   The command to execute. May include placeholders used for sprintf.
  * @param ...
@@ -108,8 +110,18 @@ function drush_get_editor() {
  * @see drush_shell_exec.
  */
 function drush_shell_exec_interactive($cmd) {
-  $args = func_get_args();
+  $command = _drush_build_shell_command(func_get_args());
 
+  if (drush_get_context('DRUSH_VERBOSE') || drush_get_context('DRUSH_SIMULATE')) {
+    drush_print('Executing: ' . $command, 0, STDERR);
+  }
+  if (!drush_get_context('DRUSH_SIMULATE')) {
+    $result = drush_shell_proc_open($command);
+    return ($result == 0) ? TRUE : FALSE;
+  }
+}
+
+function _drush_build_shell_command($args) {
   // Do not change the command itself, just the parameters.
   for ($x = 1; $x < count($args); $x++) {
     $args[$x] = drush_escapeshellarg($args[$x]);
@@ -126,15 +138,8 @@ function drush_shell_exec_interactive($cmd) {
     $command = call_user_func_array('sprintf', $args);
   }
 
-  if (drush_get_context('DRUSH_VERBOSE') || drush_get_context('DRUSH_SIMULATE')) {
-    drush_print('Executing: ' . $command, 0, STDERR);
-  }
-  if (!drush_get_context('DRUSH_SIMULATE')) {
-    $result = drush_shell_proc_open($command);
-    return ($result == 0) ? TRUE : FALSE;
-  }
+  return $command;
 }
-
 
 /**
  * Internal function: executes a shell command on the
@@ -146,8 +151,6 @@ function drush_shell_exec_interactive($cmd) {
  *
  * @param $args
  *   The command and its arguments.
- * @param $interactive
- *   Whether to run in
  *
  * @return
  *   TRUE on success, FALSE on failure
@@ -155,15 +158,42 @@ function drush_shell_exec_interactive($cmd) {
  * @see drush_shell_exec.
  */
 function _drush_shell_exec($args) {
+  $command = _drush_build_shell_command($args);
+  $process = new Process($command);
+  return drush_run_process($process);
+}
+
+/**
+ * Run a command using the Symfony process component.
+ *
+ * @param $args
+ *   $args[0] - the command to execute
+ *   $args[1] - the first commandline argument
+ *   etc.
+ */
+function drush_run(array $args, $path = NULL) {
   // The first argument is the command; the rest
   // are the command arguments.
   $commandPrefix = array_shift($args);
 
   // Use a Symfony ProcessBuilder to create a Process.
   $builder = new ProcessBuilder();
-  $builder->setPrefix($commandPrefix);
-  $process = $builder->setArguments(array($args))->getProcess();
+  $builder
+    ->setWorkingDirectory($path)
+    ->setPrefix($commandPrefix)
+    ->setArguments($args);
+  $process = $builder->getProcess();
 
+  return drush_run_process($process);
+}
+
+/**
+ * Given a Symfony process component, run it the Drush way.
+ *
+ * @param $process
+ *   Symfony Process component to run.
+ */
+function drush_run_process(Process $process) {
   if (drush_get_context('DRUSH_VERBOSE') || drush_get_context('DRUSH_SIMULATE')) {
     $command = $process->getCommandLine();
     drush_print('Executing: ' . $command, 0, STDERR);
