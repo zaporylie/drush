@@ -1,6 +1,7 @@
 <?php
 
 use Symfony\Component\Process\Process;
+use Symfony\Component\Process\ProcessBuilder;
 
 /**
  * @file
@@ -107,28 +108,8 @@ function drush_get_editor() {
  * @see drush_shell_exec.
  */
 function drush_shell_exec_interactive($cmd) {
-  return _drush_shell_exec(func_get_args(), TRUE);
-}
+  $args = func_get_args();
 
-/**
- * Internal function: executes a shell command on the
- * local machine.  This function should not be used
- * in instances where ssh is utilized to execute a
- * command remotely; otherwise, remote operations would
- * fail if executed from a Windows machine to a remote
- * Linux server.
- *
- * @param $args
- *   The command and its arguments.
- * @param $interactive
- *   Whether to run in
- *
- * @return
- *   TRUE on success, FALSE on failure
- *
- * @see drush_shell_exec.
- */
-function _drush_shell_exec($args, $interactive = FALSE) {
   // Do not change the command itself, just the parameters.
   for ($x = 1; $x < count($args); $x++) {
     $args[$x] = drush_escapeshellarg($args[$x]);
@@ -149,25 +130,57 @@ function _drush_shell_exec($args, $interactive = FALSE) {
     drush_print('Executing: ' . $command, 0, STDERR);
   }
   if (!drush_get_context('DRUSH_SIMULATE')) {
-    if ($interactive) {
-      $result = drush_shell_proc_open($command);
-      return ($result == 0) ? TRUE : FALSE;
-    }
-    else {
-      $process = new Process($command . ' 2>&1', NULL, NULL, NULL, 0);
-      $result = $process->run();
-      $output = explode("\n", trim($process->getOutput()));
-      _drush_shell_exec_output_set($output);
+    $result = drush_shell_proc_open($command);
+    return ($result == 0) ? TRUE : FALSE;
+  }
+}
 
-      if (drush_get_context('DRUSH_DEBUG')) {
-        foreach ($output as $line) {
-          drush_print($line, 2);
-        }
+
+/**
+ * Internal function: executes a shell command on the
+ * local machine.  This function should not be used
+ * in instances where ssh is utilized to execute a
+ * command remotely; otherwise, remote operations would
+ * fail if executed from a Windows machine to a remote
+ * Linux server.
+ *
+ * @param $args
+ *   The command and its arguments.
+ * @param $interactive
+ *   Whether to run in
+ *
+ * @return
+ *   TRUE on success, FALSE on failure
+ *
+ * @see drush_shell_exec.
+ */
+function _drush_shell_exec($args) {
+  // The first argument is the command; the rest
+  // are the command arguments.
+  $commandPrefix = array_shift($args);
+
+  // Use a Symfony ProcessBuilder to create a Process.
+  $builder = new ProcessBuilder();
+  $builder->setPrefix($commandPrefix);
+  $process = $builder->setArguments(array($args))->getProcess();
+
+  if (drush_get_context('DRUSH_VERBOSE') || drush_get_context('DRUSH_SIMULATE')) {
+    $command = $process->getCommandLine();
+    drush_print('Executing: ' . $command, 0, STDERR);
+  }
+  if (!drush_get_context('DRUSH_SIMULATE')) {
+    $result = $process->run();
+    $output = explode("\n", trim($process->getOutput()));
+    _drush_shell_exec_output_set($output);
+
+    if (drush_get_context('DRUSH_DEBUG')) {
+      foreach ($output as $line) {
+        drush_print($line, 2);
       }
-
-      // Exit code 0 means success.
-      return ($result == 0);
     }
+
+    // Exit code 0 means success.
+    return ($result == 0);
   }
   else {
     return TRUE;
