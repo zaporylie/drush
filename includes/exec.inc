@@ -167,11 +167,34 @@ function _drush_shell_exec($args) {
  * Run a command using the Symfony process component.
  *
  * @param $args
+ *   string - the command to run, and its arguments (if no escaping is needed)
+ *   array - the command to run and its arguments
+ *      $args[0] - the command to execute
+ *      $args[1] - the first commandline argument
+ *      etc.
+ */
+function drush_run($args, $path = NULL) {
+  if (is_string($args)) {
+    $process = new Process($command);
+    if ($path) {
+      $process->setWorkingDirectory($path);
+    }
+  }
+  else {
+    $process = _drush_build_process($args, $path);
+  }
+  return drush_run_process($process);
+}
+
+/**
+ * Run a command using the Symfony process component.
+ *
+ * @param $args
  *   $args[0] - the command to execute
  *   $args[1] - the first commandline argument
  *   etc.
  */
-function drush_run(array $args, $path = NULL) {
+function _drush_build_process(array $args, $path = NULL) {
   // The first argument is the command; the rest
   // are the command arguments.
   $commandPrefix = array_shift($args);
@@ -182,9 +205,7 @@ function drush_run(array $args, $path = NULL) {
     ->setWorkingDirectory($path)
     ->setPrefix($commandPrefix)
     ->setArguments($args);
-  $process = $builder->getProcess();
-
-  return drush_run_process($process);
+  return $builder->getProcess();
 }
 
 /**
